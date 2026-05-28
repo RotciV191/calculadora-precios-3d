@@ -110,6 +110,7 @@ function App() {
   }));
 
   const [copiedOrderId, setCopiedOrderId] = useState("");
+  const [printOrder, setPrintOrder] = useState(null);
 
   useEffect(() => localStorage.setItem("materials", JSON.stringify(materials)), [materials]);
   useEffect(() => localStorage.setItem("quotes", JSON.stringify(quotes)), [quotes]);
@@ -446,9 +447,9 @@ function App() {
     <main className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">MVP v4.5 · Márgenes</p>
+          <p className="eyebrow">MVP v5 · Vista imprimible</p>
           <h1>Calculadora de Precios 3D</h1>
-          <p>Cotiza con margen real editable, guarda pedidos y copia mensajes listos para enviar al cliente.</p>
+          <p>Cotiza, guarda pedidos, copia mensajes y genera una vista imprimible para entregar al cliente.</p>
         </div>
         <button className="ghost" onClick={resetAll}>Restaurar</button>
       </header>
@@ -766,6 +767,7 @@ function App() {
                     <div className="product-actions">
                       <button className="primary small" onClick={() => copyText(buildCustomerQuoteMessage(order), order.id)}>Copiar cotización</button>
                       <button className="secondary small" onClick={() => copyText(buildInternalSummaryMessage(order), order.id)}>Copiar resumen interno</button>
+                      <button className="secondary small" onClick={() => setPrintOrder(order)}>Vista imprimible</button>
                       <button className="secondary small" onClick={() => loadOrderToCalculator(order)}>Cargar/editar</button>
                       <button className="danger small" onClick={() => removeOrder(order.id)}>Eliminar</button>
                     </div>
@@ -826,6 +828,74 @@ function App() {
             )}
           </Card>
         </section>
+      )}
+      {printOrder && (
+        <div className="print-overlay">
+          <div className="print-panel">
+            <div className="print-actions no-print">
+              <button className="ghost" onClick={() => setPrintOrder(null)}>Cerrar</button>
+              <button className="secondary" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
+            </div>
+
+            <section className="quote-sheet">
+              <div className="quote-header">
+                <div>
+                  <p className="quote-label">Cotización de impresión 3D</p>
+                  <h1>{printOrder.productName}</h1>
+                </div>
+                <div className="quote-total">
+                  <span>Total</span>
+                  <strong>{money(printOrder.total)}</strong>
+                </div>
+              </div>
+
+              <div className="quote-meta">
+                <div><span>Cliente</span><strong>{printOrder.customerName}</strong></div>
+                <div><span>Contacto</span><strong>{printOrder.contact || "No registrado"}</strong></div>
+                <div><span>Fecha</span><strong>{formatDate(printOrder.createdAt)}</strong></div>
+                <div><span>Entrega estimada</span><strong>{formatDate(printOrder.promisedDate)}</strong></div>
+              </div>
+
+              <div className="quote-section">
+                <h2>Detalle del pedido</h2>
+                <table>
+                  <tbody>
+                    <tr><td>Producto</td><td>{printOrder.productName}</td></tr>
+                    <tr><td>Material</td><td>{printOrder.materialName}</td></tr>
+                    <tr><td>Tipo de venta</td><td>{printOrder.saleType}</td></tr>
+                    <tr><td>Estado</td><td>{printOrder.status}</td></tr>
+                    <tr><td>Prioridad</td><td>{printOrder.priority}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="quote-section">
+                <h2>Pago</h2>
+                <table>
+                  <tbody>
+                    <tr><td>Total</td><td>{money(printOrder.total)}</td></tr>
+                    <tr><td>Anticipo</td><td>{money(printOrder.deposit)}</td></tr>
+                    <tr><td>Saldo pendiente</td><td>{money(printOrder.balance)}</td></tr>
+                    <tr><td>Estado de pago</td><td>{printOrder.paymentStatus}</td></tr>
+                    <tr><td>Método de pago</td><td>{printOrder.paymentMethod}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {printOrder.notes && (
+                <div className="quote-section">
+                  <h2>Notas</h2>
+                  <p>{printOrder.notes}</p>
+                </div>
+              )}
+
+              <div className="quote-footer">
+                <p>Gracias por tu pedido.</p>
+                <p className="fine-print">Cotización válida según especificaciones acordadas. Cambios de material, tamaño, cantidad o diseño pueden modificar el precio final.</p>
+              </div>
+            </section>
+          </div>
+        </div>
       )}
     </main>
   );
