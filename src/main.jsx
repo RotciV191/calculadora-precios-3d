@@ -11,6 +11,9 @@ const DEFAULT_MATERIALS = [
 
 const DEFAULT_FORM = {
   productName: "Mini Copa Mundial 10 cm",
+  productionMode: "individual",
+  batchProducedQty: 1,
+  customerQty: 1,
   modelGrams: 24,
   purgeGrams: 6,
   printHours: 2,
@@ -113,7 +116,10 @@ function App() {
       ...stored,
       minimumMarginPercent: stored.minimumMarginPercent ?? 40,
       recommendedMarginPercent: stored.recommendedMarginPercent ?? 60,
-      premiumMarginPercent: stored.premiumMarginPercent ?? 70
+      premiumMarginPercent: stored.premiumMarginPercent ?? 70,
+      productionMode: stored.productionMode ?? "individual",
+      batchProducedQty: stored.batchProducedQty ?? 1,
+      customerQty: stored.customerQty ?? 1
     };
   });
   const [selectedMaterialId, setSelectedMaterialId] = useState(() => loadStorage("selectedMaterialId", DEFAULT_MATERIALS[0].id));
@@ -155,6 +161,13 @@ function App() {
     const purgeGrams = numberValue(form.purgeGrams);
     const totalGrams = modelGrams + purgeGrams;
 
+    const producedQty = form.productionMode === "batch"
+      ? Math.max(1, numberValue(form.batchProducedQty, 1))
+      : 1;
+    const customerQty = form.productionMode === "batch"
+      ? Math.max(1, numberValue(form.customerQty, 1))
+      : 1;
+
     const rollCost = numberValue(selectedMaterial?.rollCost, 16);
     const rollWeight = numberValue(selectedMaterial?.rollWeight, 1000);
     const materialCost = (totalGrams / rollWeight) * rollCost;
@@ -164,28 +177,52 @@ function App() {
     const laborCost = (numberValue(form.laborMinutes) / 60) * numberValue(form.laborRate, 18);
     const amsCost = form.amsEnabled ? numberValue(form.amsExtra) : 0;
 
-    const extraMaterialsCost = extraMaterials.reduce((sum, item) => {
+    const extraMaterialsCostPerUnit = extraMaterials.reduce((sum, item) => {
       return sum + numberValue(item.quantity) * numberValue(item.unitCost);
     }, 0);
 
-    const baseCost =
-      materialCost +
-      machineCost +
-      laborCost +
-      amsCost +
-      extraMaterialsCost +
+    const variableOrderCostPerUnit =
+      extraMaterialsCostPerUnit +
       numberValue(form.packagingCost) +
       numberValue(form.hardwareCost);
 
-    const failureCost = baseCost * (numberValue(form.failureRate) / 100);
-    const realCost = baseCost + failureCost;
+    const productionBaseCost =
+      materialCost +
+      machineCost +
+      laborCost +
+      amsCost;
 
-    const minimumPrice = roundToQuarter(priceFromMargin(realCost, form.minimumMarginPercent));
-    const recommendedPrice = roundToQuarter(priceFromMargin(realCost, form.recommendedMarginPercent));
-    const premiumPrice = roundToQuarter(priceFromMargin(realCost, form.premiumMarginPercent));
+    const productionFailureCost = productionBaseCost * (numberValue(form.failureRate) / 100);
+    const productionRealCost = productionBaseCost + productionFailureCost;
+
+    const productionUnitCost = productionRealCost / producedQty;
+    const customerRealCost = (productionUnitCost + variableOrderCostPerUnit) * customerQty;
+
+    const realCost = customerRealCost;
+    const extraMaterialsCost = extraMaterialsCostPerUnit * customerQty;
+    const failureCost = productionFailureCost;
+    const unitRealCost = productionUnitCost + variableOrderCostPerUnit;
+
+    const minimumUnitPrice = roundToQuarter(priceFromMargin(unitRealCost, form.minimumMarginPercent));
+    const recommendedUnitPrice = roundToQuarter(priceFromMargin(unitRealCost, form.recommendedMarginPercent));
+    const premiumUnitPrice = roundToQuarter(priceFromMargin(unitRealCost, form.premiumMarginPercent));
+
+    const minimumPrice = roundToQuarter(minimumUnitPrice * customerQty);
+    const recommendedPrice = roundToQuarter(recommendedUnitPrice * customerQty);
+    const premiumPrice = roundToQuarter(premiumUnitPrice * customerQty);
 
     return {
       totalGrams,
+      producedQty,
+      customerQty,
+      productionMode: form.productionMode,
+      productionRealCost,
+      productionUnitCost,
+      variableOrderCostPerUnit,
+      unitRealCost,
+      minimumUnitPrice,
+      recommendedUnitPrice,
+      premiumUnitPrice,
       materialCost,
       machineCost,
       laborCost,
@@ -451,6 +488,9 @@ function App() {
     setForm((current) => ({
       ...current,
       productName: "",
+      productionMode: "individual",
+      batchProducedQty: 1,
+      customerQty: 1,
       modelGrams: 0,
       purgeGrams: 0
     }));
@@ -660,6 +700,7 @@ function App() {
       "Hola, te comparto tu cotización:",
       "",
       `Producto: ${order.productName}`,
+      ...(order.quantity && order.quantity > 1 ? [`Cantidad: ${order.quantity}`] : []),
       `Total: ${money(order.total)}`,
       `Anticipo: ${money(order.deposit)}`,
       `Saldo pendiente: ${money(order.balance)}`,
@@ -680,6 +721,8 @@ function App() {
       `Pedido: ${order.customerName}`,
       `Contacto: ${order.contact || "Sin contacto"}`,
       `Producto: ${order.productName}`,
+      `Cantidad cliente: ${order.quantity || 1}`,
+      `Modo producción: ${order.productionMode === "batch" ? "Lote / stock" : "Individual"}`,
       `Material: ${order.materialName}`,
       `Venta: ${order.saleType}`,
       `Estado: ${order.status}`,
@@ -745,6 +788,11 @@ function App() {
       contact: orderDraft.contact || "",
       productName,
       materialName: selectedMaterial?.name || "Material",
+      quantity: result.customerQty,
+      productionMode: result.productionMode,
+      producedQty: result.producedQty,
+      unitRealCost: result.unitRealCost,
+      recommendedUnitPrice: result.recommendedUnitPrice,
       saleType: orderDraft.saleType,
       status: orderDraft.status,
       paymentMethod: orderDraft.paymentMethod,
@@ -835,9 +883,9 @@ function App() {
     <main className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">MVP v8.1 · Clientes reales</p>
+          <p className="eyebrow">MVP v9.2 · Modo lote</p>
           <h1>Calculadora de Precios 3D</h1>
-          <p>Cotiza, guarda pedidos, administra insumos y conserva clientes aunque elimines pedidos.</p>
+          <p>Cotiza piezas individuales o producidas en lote, con costo unitario real y precio al cliente.</p>
         </div>
         <div className="hero-actions">
           <button className="ghost" onClick={resetCalculatorForm}>Limpiar formulario</button>
@@ -1015,6 +1063,32 @@ function App() {
                   <input type="number" value={form.purgeGrams} onChange={(e) => update("purgeGrams", e.target.value)} />
                 </Field>
               </div>
+            </Card>
+
+            <Card title="Modo de cotización">
+              <p className="muted">Individual: cotizas una pieza normal. Lote/stock: los datos del laminador son del lote completo y la app divide costo por pieza.</p>
+              <div className="grid2">
+                <Field label="Tipo de cotización">
+                  <select value={form.productionMode} onChange={(e) => update("productionMode", e.target.value)}>
+                    <option value="individual">Individual</option>
+                    <option value="batch">Lote / stock</option>
+                  </select>
+                </Field>
+                <Field label="Piezas que compra el cliente">
+                  <input type="number" min="1" step="1" value={form.customerQty} onChange={(e) => update("customerQty", e.target.value)} disabled={form.productionMode !== "batch"} />
+                </Field>
+                {form.productionMode === "batch" && (
+                  <Field label="Piezas producidas en el lote">
+                    <input type="number" min="1" step="1" value={form.batchProducedQty} onChange={(e) => update("batchProducedQty", e.target.value)} />
+                  </Field>
+                )}
+              </div>
+              {form.productionMode === "batch" && (
+                <div className="batch-explain">
+                  <strong>Cómo se calcula:</strong>
+                  <p>Filamento, tiempo, máquina, mano de obra y AMS se dividen entre las piezas producidas. Insumos, empaque y extras se multiplican por las piezas que compra el cliente.</p>
+                </div>
+              )}
             </Card>
 
             <Card title="Tiempo y producción">
@@ -1203,19 +1277,28 @@ function App() {
                 <Mini label="Material" value={money(result.materialCost)} />
                 <Mini label="Máquina" value={money(result.machineCost)} />
                 <Mini label="Postproceso" value={money(result.laborCost)} />
-                <Mini label="Extras" value={money(result.extraMaterialsCost)} />
+                <Mini label="Extras cliente" value={money(result.extraMaterialsCost)} />
                 <Mini label="AMS" value={money(result.amsCost)} />
-                <Mini label="Fallo" value={money(result.failureCost)} />
+                <Mini label="Fallo producción" value={money(result.failureCost)} />
               </div>
 
+              {result.productionMode === "batch" && (
+                <div className="batch-result-box">
+                  <div><span>Costo total lote</span><strong>{money(result.productionRealCost)}</strong></div>
+                  <div><span>Piezas lote</span><strong>{result.producedQty}</strong></div>
+                  <div><span>Costo producción por pieza</span><strong>{money(result.productionUnitCost)}</strong></div>
+                  <div><span>Cliente compra</span><strong>{result.customerQty}</strong></div>
+                </div>
+              )}
+
               <div className="big-number">
-                <span>Costo real estimado</span>
+                <span>Costo real del cliente</span>
                 <strong>{money(result.realCost)}</strong>
               </div>
 
-              <PriceRow label="Precio mínimo" value={money(result.minimumPrice)} />
-              <PriceRow label="Precio recomendado" value={money(result.recommendedPrice)} highlight />
-              <PriceRow label="Precio premium" value={money(result.premiumPrice)} />
+              <PriceRow label="Precio mínimo" value={`${money(result.minimumPrice)} total · ${money(result.minimumUnitPrice)} c/u`} />
+              <PriceRow label="Precio recomendado" value={`${money(result.recommendedPrice)} total · ${money(result.recommendedUnitPrice)} c/u`} highlight />
+              <PriceRow label="Precio premium" value={`${money(result.premiumPrice)} total · ${money(result.premiumUnitPrice)} c/u`} />
 
               <div className="note">
                 <p>Ganancia recomendada: <strong>{money(result.profitRecommended)}</strong></p>
@@ -1402,7 +1485,7 @@ function App() {
                             <div className="customer-order-row" key={order.id}>
                               <div>
                                 <strong>{order.productName}</strong>
-                                <p>{order.createdAt} · {order.status} · {order.paymentStatus}</p>
+                                <p>{order.createdAt} · {order.status} · {order.paymentStatus} · Cant. {order.quantity || 1}</p>
                               </div>
                               <div className="customer-order-money">
                                 <span>Total</span>
@@ -1509,6 +1592,8 @@ function App() {
                 <table>
                   <tbody>
                     <tr><td>Producto</td><td>{printOrder.productName}</td></tr>
+                    <tr><td>Cantidad</td><td>{printOrder.quantity || 1}</td></tr>
+                    <tr><td>Modo producción</td><td>{printOrder.productionMode === "batch" ? "Lote / stock" : "Individual"}</td></tr>
                     <tr><td>Material</td><td>{printOrder.materialName}</td></tr>
                     <tr><td>Tipo de venta</td><td>{printOrder.saleType}</td></tr>
                     <tr><td>Estado</td><td>{printOrder.status}</td></tr>

@@ -1021,3 +1021,46 @@ input:focus, select:focus, textarea:focus {
 @media (max-width: 860px) {
   .customer-edit-grid { grid-template-columns: 1fr; }
 }
+
+
+.batch-explain {
+  background: #f4f4f5;
+  border-radius: 18px;
+  padding: 14px;
+  margin-top: 14px;
+}
+
+.batch-explain p {
+  margin: 5px 0 0;
+  color: #71717a;
+}
+
+.batch-result-box {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.batch-result-box div {
+  background: rgba(255,255,255,.1);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.batch-result-box span {
+  display: block;
+  color: #d4d4d8;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.batch-result-box strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+@media (max-width: 860px) {
+  .batch-result-box { grid-template-columns: 1fr; }
+}
