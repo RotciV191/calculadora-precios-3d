@@ -1,25 +1,30 @@
-# Calculadora de Precios 3D v9.2
+# Calculadora de Precios 3D v9.2.1
 
-App web para cotizar piezas individuales o producidas en lote/stock.
+Corrección del modo lote.
 
-## Nuevas funciones v9.2
+## Qué corrige
 
-- Nueva sección: Modo de cotización
-- Modo Individual
-- Modo Lote / stock
-- Piezas producidas en el lote
-- Piezas que compra el cliente
-- Costo total del lote
-- Costo de producción por pieza
-- Costo real del cliente
-- Precio recomendado total y por pieza
-- Pedidos guardan cantidad, modo de producción y costo unitario
+La versión 9.2 calculaba el precio recomendado usando directamente el costo bajo del lote. Eso servía como precio interno/stock, pero podía bajar demasiado el precio cuando el cliente solo compra 1 pieza.
 
-## Lógica del modo lote
+## Nueva lógica
 
-- Filamento, tiempo, máquina, mano de obra y AMS se dividen entre las piezas producidas.
-- Insumos, empaque y extras se multiplican por las piezas que compra el cliente.
-- El precio final se calcula con el margen real editable.
+En modo Lote / stock se separan dos cosas:
+
+1. Costo interno real:
+   - costo total del lote
+   - costo interno por pieza
+   - costo real estimado del pedido
+
+2. Precio al cliente:
+   - Precio individual público
+   - Mayoreo según cantidad
+   - Costo lote + margen
+
+## Recomendación de uso
+
+- Cliente compra 1: usa Precio individual público.
+- Cliente compra varias: usa Mayoreo según cantidad.
+- Solo usa Costo lote + margen si quieres vender barato por stock, liquidación o pedido grande.
 
 ## Publicar actualización
 
