@@ -1,27 +1,30 @@
-# Calculadora de Precios 3D v2
+# Calculadora de Precios 3D v3
 
-App web para cotizar piezas de impresión 3D.
+App web para cotizar piezas de impresión 3D y guardar pedidos.
 
-## Nuevas funciones v2
+## Nuevas funciones v3
 
-- Productos guardados
-- Cargar producto a la calculadora
-- Duplicar producto
-- Eliminar producto
-- Materiales extra por pieza
-- Historial local
-- Materiales editables
+- Pestaña Pedidos
+- Datos de cliente
+- Contacto
+- Tipo de venta
+- Estado del pedido
+- Método de pago
+- Anticipo
+- Saldo pendiente automático
+- Fecha prometida
+- Prioridad
+- Notas
+- Cargar pedido de regreso a la calculadora
+- Actualizar estado, pago, anticipo y total desde pedidos
 
-## Cómo publicar cambios en Vercel
+## Publicar actualización
 
-1. Sube estos archivos a GitHub.
-2. Vercel detecta el cambio automáticamente.
-3. Espera el nuevo Deploy.
-4. Refresca la página de la app.
-
-## Comandos locales
-
-```bash
-npm install
-npm run dev
-```
+1. Sube/reemplaza estos archivos en GitHub:
+   - index.html
+   - package.json
+   - README.md
+   - src/main.jsx
+   - src/styles.css
+2. Haz commit.
+3. Vercel publicará automáticamente.
