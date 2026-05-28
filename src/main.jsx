@@ -32,8 +32,21 @@ const DEFAULT_FORM = {
 };
 
 const DEFAULT_EXTRAS = [
-  { id: "keyring", name: "Argolla llavero", quantity: 1, unitCost: 0.12 },
-  { id: "bag", name: "Bolsa empaque", quantity: 1, unitCost: 0.10 }
+  { id: "keyring", name: "Argolla llavero", quantity: 1, unitCost: 0.12, supplyId: "keyrings" },
+  { id: "bag", name: "Bolsa empaque", quantity: 1, unitCost: 0.10, supplyId: "bags" }
+];
+
+const DEFAULT_SUPPLIES = [
+  { id: "keyrings", name: "Argollas llavero", packageCost: 8.99, packageQuantity: 100 },
+  { id: "magnets", name: "Imanes", packageCost: 12.99, packageQuantity: 200 },
+  { id: "bags", name: "Bolsas empaque", packageCost: 6.99, packageQuantity: 100 },
+  { id: "stickers", name: "Stickers", packageCost: 10, packageQuantity: 250 },
+  { id: "screws", name: "Tornillos", packageCost: 7.99, packageQuantity: 100 },
+  { id: "nuts", name: "Tuercas", packageCost: 6.99, packageQuantity: 100 },
+  { id: "leds", name: "LEDs", packageCost: 9.99, packageQuantity: 50 },
+  { id: "glue", name: "Pegamento", packageCost: 4.99, packageQuantity: 1 },
+  { id: "chain", name: "Cadena", packageCost: 8.99, packageQuantity: 20 },
+  { id: "premium-packaging", name: "Empaque premium", packageCost: 12.99, packageQuantity: 50 }
 ];
 
 const ORDER_STATUSES = ["Cotizado", "Aceptado", "En producción", "Listo", "Entregado", "Pagado", "Cancelado", "Devolución"];
@@ -72,6 +85,10 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function supplyUnitCost(supply) {
+  return numberValue(supply.packageCost) / Math.max(1, numberValue(supply.packageQuantity, 1));
+}
+
 function priceFromMargin(cost, marginPercent) {
   const margin = Math.min(95, Math.max(0, numberValue(marginPercent))) / 100;
   if (margin >= 0.95) return cost;
@@ -81,6 +98,7 @@ function priceFromMargin(cost, marginPercent) {
 function App() {
   const [tab, setTab] = useState("dashboard");
   const [materials, setMaterials] = useState(() => loadStorage("materials", DEFAULT_MATERIALS));
+  const [supplies, setSupplies] = useState(() => loadStorage("supplies", DEFAULT_SUPPLIES));
   const [quotes, setQuotes] = useState(() => loadStorage("quotes", []));
   const [products, setProducts] = useState(() => loadStorage("products", []));
   const [orders, setOrders] = useState(() => loadStorage("orders", []));
@@ -113,6 +131,7 @@ function App() {
   const [printOrder, setPrintOrder] = useState(null);
 
   useEffect(() => localStorage.setItem("materials", JSON.stringify(materials)), [materials]);
+  useEffect(() => localStorage.setItem("supplies", JSON.stringify(supplies)), [supplies]);
   useEffect(() => localStorage.setItem("quotes", JSON.stringify(quotes)), [quotes]);
   useEffect(() => localStorage.setItem("products", JSON.stringify(products)), [products]);
   useEffect(() => localStorage.setItem("orders", JSON.stringify(orders)), [orders]);
@@ -296,10 +315,115 @@ function App() {
     setTab("calculator");
   };
 
+  const resetPieceData = () => {
+    setForm((current) => ({
+      ...current,
+      productName: "",
+      modelGrams: 0,
+      purgeGrams: 0
+    }));
+  };
+
+  const resetProductionData = () => {
+    setForm((current) => ({
+      ...current,
+      printHours: 0,
+      printMinutes: 0,
+      machineRate: 1.5,
+      laborMinutes: 0,
+      laborRate: 18,
+      failureRate: 10,
+      packagingCost: 0,
+      hardwareCost: 0,
+      amsEnabled: false,
+      amsExtra: 0
+    }));
+  };
+
+  const resetExtraMaterials = () => {
+    setExtraMaterials([]);
+  };
+
+  const resetMargins = () => {
+    setForm((current) => ({
+      ...current,
+      minimumMarginPercent: 40,
+      recommendedMarginPercent: 60,
+      premiumMarginPercent: 70
+    }));
+  };
+
+  const resetOrderDraft = () => {
+    setOrderDraft({
+      customerName: "",
+      contact: "",
+      saleType: "En persona",
+      status: "Cotizado",
+      paymentMethod: "No definido",
+      deposit: 0,
+      promisedDate: "",
+      priority: "Normal",
+      notes: ""
+    });
+  };
+
+  const resetCalculatorForm = () => {
+    setForm(DEFAULT_FORM);
+    setSelectedMaterialId(DEFAULT_MATERIALS[0].id);
+    setExtraMaterials([]);
+    resetOrderDraft();
+  };
+
+  const addSupply = () => {
+    setSupplies((current) => [
+      ...current,
+      { id: crypto.randomUUID(), name: "Nuevo insumo", packageCost: 0, packageQuantity: 1 }
+    ]);
+  };
+
+  const updateSupply = (id, key, value) => {
+    setSupplies((current) => current.map((supply) => (supply.id === id ? { ...supply, [key]: value } : supply)));
+  };
+
+  const removeSupply = (id) => {
+    setSupplies((current) => current.filter((supply) => supply.id !== id));
+  };
+
+  const applySupplyToExtra = (extraId, supplyId) => {
+    if (supplyId === "manual") {
+      updateExtraMaterial(extraId, "supplyId", "");
+      return;
+    }
+    const supply = supplies.find((item) => item.id === supplyId);
+    if (!supply) return;
+    setExtraMaterials((current) =>
+      current.map((item) =>
+        item.id === extraId
+          ? { ...item, supplyId, name: supply.name, unitCost: supplyUnitCost(supply).toFixed(4) }
+          : item
+      )
+    );
+  };
+
+  const addExtraFromSupply = (supplyId) => {
+    const supply = supplies.find((item) => item.id === supplyId);
+    if (!supply) return;
+    setExtraMaterials((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        supplyId: supply.id,
+        name: supply.name,
+        quantity: 1,
+        unitCost: supplyUnitCost(supply).toFixed(4)
+      }
+    ]);
+  };
+
   const addExtraMaterial = () => {
     setExtraMaterials((current) => [
       ...current,
-      { id: crypto.randomUUID(), name: "Material extra", quantity: 1, unitCost: 0 }
+      { id: crypto.randomUUID(), supplyId: "", name: "Material extra", quantity: 1, unitCost: 0 }
     ]);
   };
 
@@ -527,6 +651,7 @@ function App() {
   const resetAll = () => {
     if (!confirm("¿Seguro que quieres borrar historial y restaurar valores?")) return;
     setMaterials(DEFAULT_MATERIALS);
+    setSupplies(DEFAULT_SUPPLIES);
     setQuotes([]);
     setProducts([]);
     setOrders([]);
@@ -550,11 +675,14 @@ function App() {
     <main className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">MVP v7 · Dashboard</p>
+          <p className="eyebrow">MVP v8 · Insumos</p>
           <h1>Calculadora de Precios 3D</h1>
-          <p>Cotiza, guarda pedidos, revisa clientes y mira un resumen general de ventas, saldos y producción.</p>
+          <p>Cotiza, guarda pedidos, administra insumos frecuentes y limpia formularios por sección.</p>
         </div>
-        <button className="ghost" onClick={resetAll}>Restaurar</button>
+        <div className="hero-actions">
+          <button className="ghost" onClick={resetCalculatorForm}>Limpiar formulario</button>
+          <button className="ghost danger-ghost" onClick={resetAll}>Restaurar app</button>
+        </div>
       </header>
 
       <nav className="tabs">
@@ -564,6 +692,7 @@ function App() {
         <button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>Pedidos</button>
         <button className={tab === "customers" ? "active" : ""} onClick={() => setTab("customers")}>Clientes</button>
         <button className={tab === "materials" ? "active" : ""} onClick={() => setTab("materials")}>Materiales</button>
+        <button className={tab === "supplies" ? "active" : ""} onClick={() => setTab("supplies")}>Insumos</button>
         <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>Historial</button>
       </nav>
 
@@ -698,6 +827,9 @@ function App() {
         <section className="layout">
           <div className="left">
             <Card title="Datos de la pieza">
+              <div className="section-actions">
+                <button className="mini-button" onClick={resetPieceData}>Limpiar datos de pieza</button>
+              </div>
               <Field label="Nombre de la pieza">
                 <input value={form.productName} onChange={(e) => update("productName", e.target.value)} />
               </Field>
@@ -726,6 +858,9 @@ function App() {
             </Card>
 
             <Card title="Tiempo y producción">
+              <div className="section-actions">
+                <button className="mini-button" onClick={resetProductionData}>Limpiar producción</button>
+              </div>
               <div className="grid2">
                 <Field label="Horas de impresión">
                   <input type="number" value={form.printHours} onChange={(e) => update("printHours", e.target.value)} />
@@ -771,7 +906,55 @@ function App() {
               )}
             </Card>
 
+            <Card title="Materiales extra">
+              <div className="section-actions">
+                <button className="mini-button" onClick={resetExtraMaterials}>Limpiar materiales extra</button>
+              </div>
+              <p className="muted">Elige insumos guardados o escribe un material manual si no aparece.</p>
+
+              <div className="quick-supplies">
+                {supplies.slice(0, 8).map((supply) => (
+                  <button key={supply.id} className="chip-button" onClick={() => addExtraFromSupply(supply.id)}>
+                    + {supply.name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="extras">
+                {extraMaterials.map((item) => (
+                  <div className="extra-row enhanced" key={item.id}>
+                    <Field label="Insumo guardado">
+                      <select value={item.supplyId || "manual"} onChange={(e) => applySupplyToExtra(item.id, e.target.value)}>
+                        <option value="manual">Manual / no está en lista</option>
+                        {supplies.map((supply) => (
+                          <option key={supply.id} value={supply.id}>{supply.name} — {money(supplyUnitCost(supply))} c/u</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Material">
+                      <input value={item.name} onChange={(e) => updateExtraMaterial(item.id, "name", e.target.value)} />
+                    </Field>
+                    <Field label="Cantidad">
+                      <input type="number" step="1" value={item.quantity} onChange={(e) => updateExtraMaterial(item.id, "quantity", e.target.value)} />
+                    </Field>
+                    <Field label="Costo unitario">
+                      <input type="number" step="0.0001" value={item.unitCost} onChange={(e) => updateExtraMaterial(item.id, "unitCost", e.target.value)} />
+                    </Field>
+                    <button className="danger" onClick={() => removeExtraMaterial(item.id)}>Eliminar</button>
+                  </div>
+                ))}
+              </div>
+              <div className="total-line">
+                <span>Total materiales extra</span>
+                <strong>{money(result.extraMaterialsCost)}</strong>
+              </div>
+              <button className="secondary" onClick={addExtraMaterial}>Agregar material manual</button>
+            </Card>
+
             <Card title="Margen y precio">
+              <div className="section-actions">
+                <button className="mini-button" onClick={resetMargins}>Restaurar márgenes</button>
+              </div>
               <p className="muted">Aquí pones el margen real que quieres ganar. La fórmula usada es: Precio = Costo real ÷ (1 - margen).</p>
               <div className="grid3">
                 <Field label="Margen mínimo (%)">
@@ -791,32 +974,10 @@ function App() {
               </div>
             </Card>
 
-            <Card title="Materiales extra">
-              <p className="muted">Argollas, imanes, tornillos, bolsas, stickers, LEDs, pegamento o cualquier extra por pieza.</p>
-              <div className="extras">
-                {extraMaterials.map((item) => (
-                  <div className="extra-row" key={item.id}>
-                    <Field label="Material">
-                      <input value={item.name} onChange={(e) => updateExtraMaterial(item.id, "name", e.target.value)} />
-                    </Field>
-                    <Field label="Cantidad">
-                      <input type="number" step="1" value={item.quantity} onChange={(e) => updateExtraMaterial(item.id, "quantity", e.target.value)} />
-                    </Field>
-                    <Field label="Costo unitario">
-                      <input type="number" step="0.01" value={item.unitCost} onChange={(e) => updateExtraMaterial(item.id, "unitCost", e.target.value)} />
-                    </Field>
-                    <button className="danger" onClick={() => removeExtraMaterial(item.id)}>Eliminar</button>
-                  </div>
-                ))}
-              </div>
-              <div className="total-line">
-                <span>Total materiales extra</span>
-                <strong>{money(result.extraMaterialsCost)}</strong>
-              </div>
-              <button className="secondary" onClick={addExtraMaterial}>Agregar material extra</button>
-            </Card>
-
             <Card title="Datos del pedido">
+              <div className="section-actions">
+                <button className="mini-button" onClick={resetOrderDraft}>Limpiar datos del pedido</button>
+              </div>
               <p className="muted">Llena esto cuando quieras convertir la cotización actual en pedido/cotización para un cliente.</p>
               <div className="grid2">
                 <Field label="Cliente">
@@ -1062,6 +1223,35 @@ function App() {
                 ))}
               </div>
             )}
+          </Card>
+        </section>
+      )}
+
+      {tab === "supplies" && (
+        <section className="single">
+          <Card title="Insumos / Extras guardados">
+            <p className="muted">Guarda cosas que compras por paquete: argollas, imanes, bolsas, stickers, LEDs, tornillos, etc. La app calcula el costo unitario automático.</p>
+            <button className="secondary" onClick={addSupply}>Agregar insumo</button>
+            <div className="supply-list">
+              {supplies.map((supply) => (
+                <div className="supply-card" key={supply.id}>
+                  <Field label="Nombre del insumo">
+                    <input value={supply.name} onChange={(e) => updateSupply(supply.id, "name", e.target.value)} />
+                  </Field>
+                  <Field label="Costo del paquete">
+                    <input type="number" step="0.01" value={supply.packageCost} onChange={(e) => updateSupply(supply.id, "packageCost", e.target.value)} />
+                  </Field>
+                  <Field label="Cantidad por paquete">
+                    <input type="number" step="1" value={supply.packageQuantity} onChange={(e) => updateSupply(supply.id, "packageQuantity", e.target.value)} />
+                  </Field>
+                  <div className="unit-cost-box">
+                    <span>Costo unitario</span>
+                    <strong>{money(supplyUnitCost(supply))}</strong>
+                  </div>
+                  <button className="danger" onClick={() => removeSupply(supply.id)}>Eliminar</button>
+                </div>
+              ))}
+            </div>
           </Card>
         </section>
       )}
