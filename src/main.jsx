@@ -94,6 +94,8 @@ function App() {
     notes: ""
   }));
 
+  const [copiedOrderId, setCopiedOrderId] = useState("");
+
   useEffect(() => localStorage.setItem("materials", JSON.stringify(materials)), [materials]);
   useEffect(() => localStorage.setItem("quotes", JSON.stringify(quotes)), [quotes]);
   useEffect(() => localStorage.setItem("products", JSON.stringify(products)), [products]);
@@ -260,6 +262,76 @@ function App() {
     setProducts((current) => [copy, ...current]);
   };
 
+  const formatDate = (dateValue) => {
+    if (!dateValue) return "No definida";
+    try {
+      const date = new Date(`${dateValue}T00:00:00`);
+      return date.toLocaleDateString("es-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+      });
+    } catch {
+      return dateValue;
+    }
+  };
+
+  const buildCustomerQuoteMessage = (order) => {
+    const lines = [
+      "Hola, te comparto tu cotización:",
+      "",
+      `Producto: ${order.productName}`,
+      `Total: ${money(order.total)}`,
+      `Anticipo: ${money(order.deposit)}`,
+      `Saldo pendiente: ${money(order.balance)}`,
+      `Estado: ${order.status}`,
+      `Fecha estimada de entrega: ${formatDate(order.promisedDate)}`
+    ];
+
+    if (order.notes) {
+      lines.push("", "Notas:", order.notes);
+    }
+
+    lines.push("", "Gracias.");
+    return lines.join("\n");
+  };
+
+  const buildInternalSummaryMessage = (order) => {
+    const lines = [
+      `Pedido: ${order.customerName}`,
+      `Contacto: ${order.contact || "Sin contacto"}`,
+      `Producto: ${order.productName}`,
+      `Material: ${order.materialName}`,
+      `Venta: ${order.saleType}`,
+      `Estado: ${order.status}`,
+      `Pago: ${order.paymentStatus}`,
+      `Método: ${order.paymentMethod}`,
+      `Total: ${money(order.total)}`,
+      `Anticipo: ${money(order.deposit)}`,
+      `Saldo: ${money(order.balance)}`,
+      `Costo real: ${money(order.realCost)}`,
+      `Ganancia estimada: ${money(order.profit)}`,
+      `Prioridad: ${order.priority}`,
+      `Fecha prometida: ${formatDate(order.promisedDate)}`
+    ];
+
+    if (order.notes) {
+      lines.push(`Notas: ${order.notes}`);
+    }
+
+    return lines.join("\n");
+  };
+
+  const copyText = async (text, orderId) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedOrderId(orderId);
+      setTimeout(() => setCopiedOrderId(""), 1800);
+    } catch {
+      window.prompt("Copia este texto:", text);
+    }
+  };
+
   const saveOrder = () => {
     const productName = form.productName?.trim() || "Producto sin nombre";
     const order = {
@@ -355,9 +427,9 @@ function App() {
     <main className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">MVP v3 · Pedidos</p>
+          <p className="eyebrow">MVP v4 · Cotizaciones</p>
           <h1>Calculadora de Precios 3D</h1>
-          <p>Cotiza, guarda productos y convierte tus cálculos en pedidos con cliente, estado, anticipo y saldo.</p>
+          <p>Cotiza, guarda pedidos y copia mensajes listos para enviar al cliente por WhatsApp, Instagram o email.</p>
         </div>
         <button className="ghost" onClick={resetAll}>Restaurar</button>
       </header>
@@ -646,8 +718,16 @@ function App() {
                     {order.contact && <p className="muted"><b>Contacto:</b> {order.contact}</p>}
                     {order.notes && <p className="muted"><b>Notas:</b> {order.notes}</p>}
 
+                    <div className="copy-box">
+                      <strong>Texto rápido para cliente</strong>
+                      <pre>{buildCustomerQuoteMessage(order)}</pre>
+                      {copiedOrderId === order.id && <p className="copied">Copiado al portapapeles ✅</p>}
+                    </div>
+
                     <div className="product-actions">
-                      <button className="primary small" onClick={() => loadOrderToCalculator(order)}>Cargar/editar</button>
+                      <button className="primary small" onClick={() => copyText(buildCustomerQuoteMessage(order), order.id)}>Copiar cotización</button>
+                      <button className="secondary small" onClick={() => copyText(buildInternalSummaryMessage(order), order.id)}>Copiar resumen interno</button>
+                      <button className="secondary small" onClick={() => loadOrderToCalculator(order)}>Cargar/editar</button>
                       <button className="danger small" onClick={() => removeOrder(order.id)}>Eliminar</button>
                     </div>
                   </div>

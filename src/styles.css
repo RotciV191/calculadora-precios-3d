@@ -452,3 +452,32 @@ input:focus, select:focus, textarea:focus {
   .product-actions { justify-content: stretch; }
   .product-actions button { width: 100%; }
 }
+
+
+.copy-box {
+  background: #f4f4f5;
+  border: 1px dashed #d4d4d8;
+  border-radius: 20px;
+  padding: 14px;
+}
+
+.copy-box strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.copy-box pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  color: #27272a;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.copied {
+  margin: 10px 0 0 !important;
+  color: #15803d !important;
+  font-weight: 800;
+}
