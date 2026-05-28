@@ -58,7 +58,7 @@ h1 {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   background: white;
   border-radius: 20px;
   padding: 6px;
@@ -161,9 +161,7 @@ input:focus, select:focus {
   font-size: 13px;
 }
 
-.switch input {
-  display: none;
-}
+.switch input { display: none; }
 
 .switch span {
   display: block;
@@ -187,13 +185,9 @@ input:focus, select:focus {
   transition: .2s;
 }
 
-.switch input:checked + span {
-  background: #22c55e;
-}
+.switch input:checked + span { background: #22c55e; }
 
-.switch input:checked + span::after {
-  left: 27px;
-}
+.switch input:checked + span::after { left: 27px; }
 
 .extras {
   display: grid;
@@ -222,9 +216,7 @@ input:focus, select:focus {
   margin-top: 10px;
 }
 
-.card.dark .price-row {
-  background: rgba(255,255,255,.1);
-}
+.card.dark .price-row { background: rgba(255,255,255,.1); }
 
 .price-row.highlight {
   background: #22c55e !important;
@@ -281,9 +273,7 @@ input:focus, select:focus {
   margin: 12px 0;
 }
 
-.note p {
-  margin: 4px 0;
-}
+.note p { margin: 4px 0; }
 
 .primary, .secondary, .ghost, .danger {
   border: 0;
@@ -305,6 +295,11 @@ input:focus, select:focus {
   margin-top: 12px;
 }
 
+.secondary.light {
+  background: #e4e4e7;
+  color: #09090b;
+}
+
 .ghost {
   background: #f4f4f5;
   color: #18181b;
@@ -315,9 +310,13 @@ input:focus, select:focus {
   color: #991b1b;
 }
 
-.muted, .empty {
-  color: #71717a;
+.small {
+  width: auto;
+  padding: 10px 12px;
+  margin: 0;
 }
+
+.muted, .empty { color: #71717a; }
 
 .material-list {
   display: grid;
@@ -334,12 +333,13 @@ input:focus, select:focus {
   gap: 12px;
 }
 
-.quote-list {
+.quote-list, .product-list {
   display: grid;
   gap: 12px;
+  margin-top: 16px;
 }
 
-.quote {
+.quote, .product-card {
   border: 1px solid #e4e4e7;
   border-radius: 22px;
   padding: 16px;
@@ -349,14 +349,23 @@ input:focus, select:focus {
   gap: 14px;
 }
 
-.quote p {
+.product-card {
+  grid-template-columns: 1fr auto;
+}
+
+.product-card p, .quote p {
   margin: 5px 0 0;
   color: #71717a;
 }
 
-.quote-price {
-  text-align: right;
+.product-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
+
+.quote-price { text-align: right; }
 
 .quote-price span {
   display: block;
@@ -364,11 +373,19 @@ input:focus, select:focus {
   font-size: 12px;
 }
 
+.action-grid {
+  display: grid;
+  gap: 10px;
+}
+
 @media (max-width: 860px) {
   .app { padding: 12px; }
   .hero { flex-direction: column; }
+  .tabs { grid-template-columns: repeat(2, 1fr); }
   .layout { grid-template-columns: 1fr; }
   .grid2, .material-list, .summary-grid { grid-template-columns: 1fr; }
   .extra-row { grid-template-columns: 1fr; }
-  .quote { grid-template-columns: 1fr; }
+  .quote, .product-card { grid-template-columns: 1fr; }
+  .product-actions { justify-content: stretch; }
+  .product-actions button { width: 100%; }
 }

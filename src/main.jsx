@@ -67,12 +67,14 @@ function App() {
   const [tab, setTab] = useState("calculator");
   const [materials, setMaterials] = useState(() => loadStorage("materials", DEFAULT_MATERIALS));
   const [quotes, setQuotes] = useState(() => loadStorage("quotes", []));
+  const [products, setProducts] = useState(() => loadStorage("products", []));
   const [extraMaterials, setExtraMaterials] = useState(() => loadStorage("extraMaterials", DEFAULT_EXTRAS));
   const [form, setForm] = useState(() => loadStorage("form", DEFAULT_FORM));
   const [selectedMaterialId, setSelectedMaterialId] = useState(() => loadStorage("selectedMaterialId", DEFAULT_MATERIALS[0].id));
 
   useEffect(() => localStorage.setItem("materials", JSON.stringify(materials)), [materials]);
   useEffect(() => localStorage.setItem("quotes", JSON.stringify(quotes)), [quotes]);
+  useEffect(() => localStorage.setItem("products", JSON.stringify(products)), [products]);
   useEffect(() => localStorage.setItem("extraMaterials", JSON.stringify(extraMaterials)), [extraMaterials]);
   useEffect(() => localStorage.setItem("form", JSON.stringify(form)), [form]);
   useEffect(() => localStorage.setItem("selectedMaterialId", JSON.stringify(selectedMaterialId)), [selectedMaterialId]);
@@ -183,12 +185,53 @@ function App() {
     setQuotes((current) => [quote, ...current]);
   };
 
+  const saveProduct = () => {
+    const productName = form.productName?.trim() || "Producto sin nombre";
+    const product = {
+      id: crypto.randomUUID(),
+      name: productName,
+      date: new Date().toLocaleDateString(),
+      selectedMaterialId,
+      form: { ...form, productName },
+      extraMaterials: extraMaterials.map((item) => ({ ...item })),
+      preview: {
+        grams: result.totalGrams,
+        realCost: result.realCost,
+        recommendedPrice: result.recommendedPrice,
+        materialName: selectedMaterial?.name || "Material"
+      }
+    };
+    setProducts((current) => [product, ...current]);
+  };
+
+  const loadProduct = (product) => {
+    setForm(product.form);
+    setSelectedMaterialId(product.selectedMaterialId);
+    setExtraMaterials(product.extraMaterials || []);
+    setTab("calculator");
+  };
+
+  const removeProduct = (id) => {
+    setProducts((current) => current.filter((product) => product.id !== id));
+  };
+
+  const duplicateProduct = (product) => {
+    const copy = {
+      ...product,
+      id: crypto.randomUUID(),
+      name: `${product.name} copia`,
+      date: new Date().toLocaleDateString()
+    };
+    setProducts((current) => [copy, ...current]);
+  };
+
   const removeQuote = (id) => setQuotes((current) => current.filter((quote) => quote.id !== id));
 
   const resetAll = () => {
     if (!confirm("¿Seguro que quieres borrar historial y restaurar valores?")) return;
     setMaterials(DEFAULT_MATERIALS);
     setQuotes([]);
+    setProducts([]);
     setExtraMaterials(DEFAULT_EXTRAS);
     setForm(DEFAULT_FORM);
     setSelectedMaterialId(DEFAULT_MATERIALS[0].id);
@@ -198,15 +241,16 @@ function App() {
     <main className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">MVP v1</p>
+          <p className="eyebrow">MVP v2 · Productos guardados</p>
           <h1>Calculadora de Precios 3D</h1>
-          <p>Cotiza piezas impresas considerando material, máquina, AMS, postproceso, fallos y margen real.</p>
+          <p>Cotiza piezas impresas considerando material, máquina, AMS, postproceso, extras, fallos y margen real.</p>
         </div>
         <button className="ghost" onClick={resetAll}>Restaurar</button>
       </header>
 
       <nav className="tabs">
         <button className={tab === "calculator" ? "active" : ""} onClick={() => setTab("calculator")}>Calculadora</button>
+        <button className={tab === "products" ? "active" : ""} onClick={() => setTab("products")}>Productos</button>
         <button className={tab === "materials" ? "active" : ""} onClick={() => setTab("materials")}>Materiales</button>
         <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>Historial</button>
       </nav>
@@ -339,7 +383,10 @@ function App() {
                 <p>Margen aprox.: <strong>{result.marginRecommended.toFixed(1)}%</strong></p>
               </div>
 
-              <button className="primary" onClick={saveQuote}>Guardar cotización</button>
+              <div className="action-grid">
+                <button className="primary" onClick={saveQuote}>Guardar cotización</button>
+                <button className="secondary light" onClick={saveProduct}>Guardar producto</button>
+              </div>
             </Card>
 
             <Card title="Mayoreo sugerido">
@@ -348,6 +395,35 @@ function App() {
               <PriceRow label="20 piezas" value={`${money(result.wholesale20)} c/u`} />
             </Card>
           </aside>
+        </section>
+      )}
+
+      {tab === "products" && (
+        <section className="single">
+          <Card title="Productos guardados">
+            <p className="muted">Guarda productos que repites seguido. Luego puedes cargarlos a la calculadora con un clic.</p>
+            <button className="secondary" onClick={saveProduct}>Guardar producto actual</button>
+            {products.length === 0 ? (
+              <p className="empty">Aún no has guardado productos.</p>
+            ) : (
+              <div className="product-list">
+                {products.map((product) => (
+                  <div className="product-card" key={product.id}>
+                    <div>
+                      <strong>{product.name}</strong>
+                      <p>{product.date} · {product.preview?.materialName || "Material"} · {Number(product.preview?.grams || 0).toFixed(1)} g</p>
+                      <p>Costo real: <b>{money(product.preview?.realCost || 0)}</b> · Recomendado: <b>{money(product.preview?.recommendedPrice || 0)}</b></p>
+                    </div>
+                    <div className="product-actions">
+                      <button className="primary small" onClick={() => loadProduct(product)}>Cargar</button>
+                      <button className="secondary small" onClick={() => duplicateProduct(product)}>Duplicar</button>
+                      <button className="danger small" onClick={() => removeProduct(product.id)}>Eliminar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </section>
       )}
 
