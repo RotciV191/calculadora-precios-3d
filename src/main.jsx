@@ -23,9 +23,9 @@ const DEFAULT_FORM = {
   hardwareCost: 0,
   amsEnabled: true,
   amsExtra: 1.5,
-  minimumMargin: 2,
-  recommendedMargin: 2.5,
-  premiumMargin: 3,
+  minimumMarginPercent: 40,
+  recommendedMarginPercent: 60,
+  premiumMarginPercent: 70,
   wholesale5Discount: 12,
   wholesale10Discount: 22,
   wholesale20Discount: 32
@@ -36,7 +36,7 @@ const DEFAULT_EXTRAS = [
   { id: "bag", name: "Bolsa empaque", quantity: 1, unitCost: 0.10 }
 ];
 
-const ORDER_STATUSES = ["Cotizado", "Aceptado", "En producción", "Listo", "Entregado", "Pagado", "Cancelado"];
+const ORDER_STATUSES = ["Cotizado", "Aceptado", "En producción", "Listo", "Entregado", "Pagado", "Cancelado", "Devolución"];
 const SALE_TYPES = ["En persona", "WhatsApp", "Instagram", "Facebook", "Etsy", "TikTok", "Referido", "Otro"];
 const PAYMENT_METHODS = ["No definido", "Cash", "Zelle", "Cash App", "Venmo", "Tarjeta", "Transferencia", "PayPal", "Otro"];
 const PRIORITIES = ["Normal", "Alta", "Urgente"];
@@ -72,6 +72,12 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function priceFromMargin(cost, marginPercent) {
+  const margin = Math.min(95, Math.max(0, numberValue(marginPercent))) / 100;
+  if (margin >= 0.95) return cost;
+  return cost / (1 - margin);
+}
+
 function App() {
   const [tab, setTab] = useState("calculator");
   const [materials, setMaterials] = useState(() => loadStorage("materials", DEFAULT_MATERIALS));
@@ -79,7 +85,16 @@ function App() {
   const [products, setProducts] = useState(() => loadStorage("products", []));
   const [orders, setOrders] = useState(() => loadStorage("orders", []));
   const [extraMaterials, setExtraMaterials] = useState(() => loadStorage("extraMaterials", DEFAULT_EXTRAS));
-  const [form, setForm] = useState(() => loadStorage("form", DEFAULT_FORM));
+  const [form, setForm] = useState(() => {
+    const stored = loadStorage("form", DEFAULT_FORM);
+    return {
+      ...DEFAULT_FORM,
+      ...stored,
+      minimumMarginPercent: stored.minimumMarginPercent ?? 40,
+      recommendedMarginPercent: stored.recommendedMarginPercent ?? 60,
+      premiumMarginPercent: stored.premiumMarginPercent ?? 70
+    };
+  });
   const [selectedMaterialId, setSelectedMaterialId] = useState(() => loadStorage("selectedMaterialId", DEFAULT_MATERIALS[0].id));
 
   const [orderDraft, setOrderDraft] = useState(() => loadStorage("orderDraft", {
@@ -140,9 +155,9 @@ function App() {
     const failureCost = baseCost * (numberValue(form.failureRate) / 100);
     const realCost = baseCost + failureCost;
 
-    const minimumPrice = roundToQuarter(realCost * numberValue(form.minimumMargin, 2));
-    const recommendedPrice = roundToQuarter(realCost * numberValue(form.recommendedMargin, 2.5));
-    const premiumPrice = roundToQuarter(realCost * numberValue(form.premiumMargin, 3));
+    const minimumPrice = roundToQuarter(priceFromMargin(realCost, form.minimumMarginPercent));
+    const recommendedPrice = roundToQuarter(priceFromMargin(realCost, form.recommendedMarginPercent));
+    const premiumPrice = roundToQuarter(priceFromMargin(realCost, form.premiumMarginPercent));
 
     return {
       totalGrams,
@@ -156,6 +171,9 @@ function App() {
       minimumPrice,
       recommendedPrice,
       premiumPrice,
+      minimumMarginPercent: numberValue(form.minimumMarginPercent),
+      recommendedMarginPercent: numberValue(form.recommendedMarginPercent),
+      premiumMarginPercent: numberValue(form.premiumMarginPercent),
       wholesale5: roundToQuarter(recommendedPrice * (1 - numberValue(form.wholesale5Discount) / 100)),
       wholesale10: roundToQuarter(recommendedPrice * (1 - numberValue(form.wholesale10Discount) / 100)),
       wholesale20: roundToQuarter(recommendedPrice * (1 - numberValue(form.wholesale20Discount) / 100)),
@@ -311,6 +329,7 @@ function App() {
       `Saldo: ${money(order.balance)}`,
       `Costo real: ${money(order.realCost)}`,
       `Ganancia estimada: ${money(order.profit)}`,
+      `Margen estimado: ${order.total > 0 ? (((order.total - order.realCost) / order.total) * 100).toFixed(1) : "0"}%`,
       `Prioridad: ${order.priority}`,
       `Fecha prometida: ${formatDate(order.promisedDate)}`
     ];
@@ -427,9 +446,9 @@ function App() {
     <main className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">MVP v4 · Cotizaciones</p>
+          <p className="eyebrow">MVP v4.5 · Márgenes</p>
           <h1>Calculadora de Precios 3D</h1>
-          <p>Cotiza, guarda pedidos y copia mensajes listos para enviar al cliente por WhatsApp, Instagram o email.</p>
+          <p>Cotiza con margen real editable, guarda pedidos y copia mensajes listos para enviar al cliente.</p>
         </div>
         <button className="ghost" onClick={resetAll}>Restaurar</button>
       </header>
@@ -517,6 +536,26 @@ function App() {
                   <input type="number" step="0.25" value={form.amsExtra} onChange={(e) => update("amsExtra", e.target.value)} />
                 </Field>
               )}
+            </Card>
+
+            <Card title="Margen y precio">
+              <p className="muted">Aquí pones el margen real que quieres ganar. La fórmula usada es: Precio = Costo real ÷ (1 - margen).</p>
+              <div className="grid3">
+                <Field label="Margen mínimo (%)">
+                  <input type="number" min="0" max="95" value={form.minimumMarginPercent} onChange={(e) => update("minimumMarginPercent", e.target.value)} />
+                </Field>
+                <Field label="Margen recomendado (%)">
+                  <input type="number" min="0" max="95" value={form.recommendedMarginPercent} onChange={(e) => update("recommendedMarginPercent", e.target.value)} />
+                </Field>
+                <Field label="Margen premium (%)">
+                  <input type="number" min="0" max="95" value={form.premiumMarginPercent} onChange={(e) => update("premiumMarginPercent", e.target.value)} />
+                </Field>
+              </div>
+              <div className="margin-examples">
+                <div><span>Mínimo</span><strong>{result.minimumMarginPercent.toFixed(0)}%</strong><p>{money(result.minimumPrice)}</p></div>
+                <div><span>Recomendado</span><strong>{result.recommendedMarginPercent.toFixed(0)}%</strong><p>{money(result.recommendedPrice)}</p></div>
+                <div><span>Premium</span><strong>{result.premiumMarginPercent.toFixed(0)}%</strong><p>{money(result.premiumPrice)}</p></div>
+              </div>
             </Card>
 
             <Card title="Materiales extra">
@@ -615,7 +654,7 @@ function App() {
 
               <div className="note">
                 <p>Ganancia recomendada: <strong>{money(result.profitRecommended)}</strong></p>
-                <p>Margen aprox.: <strong>{result.marginRecommended.toFixed(1)}%</strong></p>
+                <p>Margen recomendado: <strong>{result.marginRecommended.toFixed(1)}%</strong></p>
               </div>
 
               <div className="action-grid">
