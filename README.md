@@ -1,22 +1,14 @@
-# Calculadora de Precios 3D v3
+# Calculadora de Precios 3D v4
 
-App web para cotizar piezas de impresión 3D y guardar pedidos.
+App web para cotizar piezas de impresión 3D, guardar pedidos y copiar cotizaciones listas para enviar.
 
-## Nuevas funciones v3
+## Nuevas funciones v4
 
-- Pestaña Pedidos
-- Datos de cliente
-- Contacto
-- Tipo de venta
-- Estado del pedido
-- Método de pago
-- Anticipo
-- Saldo pendiente automático
-- Fecha prometida
-- Prioridad
-- Notas
-- Cargar pedido de regreso a la calculadora
-- Actualizar estado, pago, anticipo y total desde pedidos
+- Botón Copiar cotización en cada pedido
+- Botón Copiar resumen interno
+- Vista previa del mensaje para cliente
+- Mensaje con producto, total, anticipo, saldo, estado, fecha y notas
+- Fallback manual si el navegador bloquea el portapapeles
 
 ## Publicar actualización
 
