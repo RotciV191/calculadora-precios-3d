@@ -36,6 +36,11 @@ const DEFAULT_EXTRAS = [
   { id: "bag", name: "Bolsa empaque", quantity: 1, unitCost: 0.10 }
 ];
 
+const ORDER_STATUSES = ["Cotizado", "Aceptado", "En producción", "Listo", "Entregado", "Pagado", "Cancelado"];
+const SALE_TYPES = ["En persona", "WhatsApp", "Instagram", "Facebook", "Etsy", "TikTok", "Referido", "Otro"];
+const PAYMENT_METHODS = ["No definido", "Cash", "Zelle", "Cash App", "Venmo", "Tarjeta", "Transferencia", "PayPal", "Otro"];
+const PRIORITIES = ["Normal", "Alta", "Urgente"];
+
 function numberValue(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -63,25 +68,45 @@ function loadStorage(key, fallback) {
   }
 }
 
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function App() {
   const [tab, setTab] = useState("calculator");
   const [materials, setMaterials] = useState(() => loadStorage("materials", DEFAULT_MATERIALS));
   const [quotes, setQuotes] = useState(() => loadStorage("quotes", []));
   const [products, setProducts] = useState(() => loadStorage("products", []));
+  const [orders, setOrders] = useState(() => loadStorage("orders", []));
   const [extraMaterials, setExtraMaterials] = useState(() => loadStorage("extraMaterials", DEFAULT_EXTRAS));
   const [form, setForm] = useState(() => loadStorage("form", DEFAULT_FORM));
   const [selectedMaterialId, setSelectedMaterialId] = useState(() => loadStorage("selectedMaterialId", DEFAULT_MATERIALS[0].id));
 
+  const [orderDraft, setOrderDraft] = useState(() => loadStorage("orderDraft", {
+    customerName: "",
+    contact: "",
+    saleType: "En persona",
+    status: "Cotizado",
+    paymentMethod: "No definido",
+    deposit: 0,
+    promisedDate: "",
+    priority: "Normal",
+    notes: ""
+  }));
+
   useEffect(() => localStorage.setItem("materials", JSON.stringify(materials)), [materials]);
   useEffect(() => localStorage.setItem("quotes", JSON.stringify(quotes)), [quotes]);
   useEffect(() => localStorage.setItem("products", JSON.stringify(products)), [products]);
+  useEffect(() => localStorage.setItem("orders", JSON.stringify(orders)), [orders]);
   useEffect(() => localStorage.setItem("extraMaterials", JSON.stringify(extraMaterials)), [extraMaterials]);
   useEffect(() => localStorage.setItem("form", JSON.stringify(form)), [form]);
   useEffect(() => localStorage.setItem("selectedMaterialId", JSON.stringify(selectedMaterialId)), [selectedMaterialId]);
+  useEffect(() => localStorage.setItem("orderDraft", JSON.stringify(orderDraft)), [orderDraft]);
 
   const selectedMaterial = materials.find((m) => m.id === selectedMaterialId) || materials[0];
 
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const updateOrderDraft = (key, value) => setOrderDraft((current) => ({ ...current, [key]: value }));
 
   const result = useMemo(() => {
     const modelGrams = numberValue(form.modelGrams);
@@ -136,6 +161,16 @@ function App() {
       marginRecommended: recommendedPrice > 0 ? ((recommendedPrice - realCost) / recommendedPrice) * 100 : 0
     };
   }, [form, selectedMaterial, extraMaterials]);
+
+  const orderPreview = useMemo(() => {
+    const total = result.recommendedPrice;
+    const deposit = numberValue(orderDraft.deposit);
+    const balance = Math.max(0, total - deposit);
+    let paymentStatus = "No pagado";
+    if (deposit >= total && total > 0) paymentStatus = "Pagado completo";
+    else if (deposit > 0) paymentStatus = "Anticipo";
+    return { total, deposit, balance, paymentStatus };
+  }, [result.recommendedPrice, orderDraft.deposit]);
 
   const addExtraMaterial = () => {
     setExtraMaterials((current) => [
@@ -225,6 +260,73 @@ function App() {
     setProducts((current) => [copy, ...current]);
   };
 
+  const saveOrder = () => {
+    const productName = form.productName?.trim() || "Producto sin nombre";
+    const order = {
+      id: crypto.randomUUID(),
+      createdAt: todayISO(),
+      customerName: orderDraft.customerName?.trim() || "Cliente sin nombre",
+      contact: orderDraft.contact || "",
+      productName,
+      materialName: selectedMaterial?.name || "Material",
+      saleType: orderDraft.saleType,
+      status: orderDraft.status,
+      paymentMethod: orderDraft.paymentMethod,
+      paymentStatus: orderPreview.paymentStatus,
+      priority: orderDraft.priority,
+      promisedDate: orderDraft.promisedDate,
+      notes: orderDraft.notes,
+      deposit: orderPreview.deposit,
+      total: orderPreview.total,
+      balance: orderPreview.balance,
+      realCost: result.realCost,
+      profit: orderPreview.total - result.realCost,
+      snapshot: {
+        selectedMaterialId,
+        form: { ...form, productName },
+        extraMaterials: extraMaterials.map((item) => ({ ...item })),
+        result: { ...result }
+      }
+    };
+    setOrders((current) => [order, ...current]);
+    setTab("orders");
+  };
+
+  const updateOrder = (id, key, value) => {
+    setOrders((current) => current.map((order) => {
+      if (order.id !== id) return order;
+      const updated = { ...order, [key]: value };
+      if (key === "deposit" || key === "total") {
+        const total = numberValue(key === "total" ? value : updated.total);
+        const deposit = numberValue(key === "deposit" ? value : updated.deposit);
+        updated.balance = Math.max(0, total - deposit);
+        updated.paymentStatus = deposit >= total && total > 0 ? "Pagado completo" : deposit > 0 ? "Anticipo" : "No pagado";
+        updated.profit = total - numberValue(updated.realCost);
+      }
+      return updated;
+    }));
+  };
+
+  const loadOrderToCalculator = (order) => {
+    if (!order.snapshot) return;
+    setForm(order.snapshot.form);
+    setSelectedMaterialId(order.snapshot.selectedMaterialId);
+    setExtraMaterials(order.snapshot.extraMaterials || []);
+    setOrderDraft({
+      customerName: order.customerName,
+      contact: order.contact,
+      saleType: order.saleType,
+      status: order.status,
+      paymentMethod: order.paymentMethod,
+      deposit: order.deposit,
+      promisedDate: order.promisedDate,
+      priority: order.priority,
+      notes: order.notes
+    });
+    setTab("calculator");
+  };
+
+  const removeOrder = (id) => setOrders((current) => current.filter((order) => order.id !== id));
   const removeQuote = (id) => setQuotes((current) => current.filter((quote) => quote.id !== id));
 
   const resetAll = () => {
@@ -232,18 +334,30 @@ function App() {
     setMaterials(DEFAULT_MATERIALS);
     setQuotes([]);
     setProducts([]);
+    setOrders([]);
     setExtraMaterials(DEFAULT_EXTRAS);
     setForm(DEFAULT_FORM);
     setSelectedMaterialId(DEFAULT_MATERIALS[0].id);
+    setOrderDraft({
+      customerName: "",
+      contact: "",
+      saleType: "En persona",
+      status: "Cotizado",
+      paymentMethod: "No definido",
+      deposit: 0,
+      promisedDate: "",
+      priority: "Normal",
+      notes: ""
+    });
   };
 
   return (
     <main className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">MVP v2 · Productos guardados</p>
+          <p className="eyebrow">MVP v3 · Pedidos</p>
           <h1>Calculadora de Precios 3D</h1>
-          <p>Cotiza piezas impresas considerando material, máquina, AMS, postproceso, extras, fallos y margen real.</p>
+          <p>Cotiza, guarda productos y convierte tus cálculos en pedidos con cliente, estado, anticipo y saldo.</p>
         </div>
         <button className="ghost" onClick={resetAll}>Restaurar</button>
       </header>
@@ -251,6 +365,7 @@ function App() {
       <nav className="tabs">
         <button className={tab === "calculator" ? "active" : ""} onClick={() => setTab("calculator")}>Calculadora</button>
         <button className={tab === "products" ? "active" : ""} onClick={() => setTab("products")}>Productos</button>
+        <button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>Pedidos</button>
         <button className={tab === "materials" ? "active" : ""} onClick={() => setTab("materials")}>Materiales</button>
         <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>Historial</button>
       </nav>
@@ -356,6 +471,54 @@ function App() {
               </div>
               <button className="secondary" onClick={addExtraMaterial}>Agregar material extra</button>
             </Card>
+
+            <Card title="Datos del pedido">
+              <p className="muted">Llena esto cuando quieras convertir la cotización actual en pedido/cotización para un cliente.</p>
+              <div className="grid2">
+                <Field label="Cliente">
+                  <input value={orderDraft.customerName} onChange={(e) => updateOrderDraft("customerName", e.target.value)} placeholder="Nombre del cliente" />
+                </Field>
+                <Field label="Contacto">
+                  <input value={orderDraft.contact} onChange={(e) => updateOrderDraft("contact", e.target.value)} placeholder="Teléfono, Instagram, WhatsApp..." />
+                </Field>
+                <Field label="Tipo de venta">
+                  <select value={orderDraft.saleType} onChange={(e) => updateOrderDraft("saleType", e.target.value)}>
+                    {SALE_TYPES.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </Field>
+                <Field label="Estado del pedido">
+                  <select value={orderDraft.status} onChange={(e) => updateOrderDraft("status", e.target.value)}>
+                    {ORDER_STATUSES.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </Field>
+                <Field label="Método de pago">
+                  <select value={orderDraft.paymentMethod} onChange={(e) => updateOrderDraft("paymentMethod", e.target.value)}>
+                    {PAYMENT_METHODS.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </Field>
+                <Field label="Anticipo recibido">
+                  <input type="number" step="0.01" value={orderDraft.deposit} onChange={(e) => updateOrderDraft("deposit", e.target.value)} />
+                </Field>
+                <Field label="Fecha prometida">
+                  <input type="date" value={orderDraft.promisedDate} onChange={(e) => updateOrderDraft("promisedDate", e.target.value)} />
+                </Field>
+                <Field label="Prioridad">
+                  <select value={orderDraft.priority} onChange={(e) => updateOrderDraft("priority", e.target.value)}>
+                    {PRIORITIES.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <Field label="Notas">
+                <textarea value={orderDraft.notes} onChange={(e) => updateOrderDraft("notes", e.target.value)} placeholder="Color, personalización, fecha, detalles..." />
+              </Field>
+              <div className="order-preview">
+                <div><span>Total</span><strong>{money(orderPreview.total)}</strong></div>
+                <div><span>Anticipo</span><strong>{money(orderPreview.deposit)}</strong></div>
+                <div><span>Saldo</span><strong>{money(orderPreview.balance)}</strong></div>
+                <div><span>Pago</span><strong>{orderPreview.paymentStatus}</strong></div>
+              </div>
+              <button className="secondary" onClick={saveOrder}>Guardar pedido / cotización</button>
+            </Card>
           </div>
 
           <aside className="right">
@@ -384,8 +547,9 @@ function App() {
               </div>
 
               <div className="action-grid">
-                <button className="primary" onClick={saveQuote}>Guardar cotización</button>
+                <button className="primary" onClick={saveQuote}>Guardar cotización simple</button>
                 <button className="secondary light" onClick={saveProduct}>Guardar producto</button>
+                <button className="secondary light" onClick={saveOrder}>Guardar pedido</button>
               </div>
             </Card>
 
@@ -427,6 +591,73 @@ function App() {
         </section>
       )}
 
+      {tab === "orders" && (
+        <section className="single">
+          <Card title="Pedidos / Cotizaciones">
+            <p className="muted">Aquí quedan las cotizaciones vinculadas a clientes, con estado, anticipo, saldo y fecha prometida.</p>
+            {orders.length === 0 ? (
+              <p className="empty">Aún no has guardado pedidos.</p>
+            ) : (
+              <div className="order-list">
+                {orders.map((order) => (
+                  <div className="order-card" key={order.id}>
+                    <div className="order-head">
+                      <div>
+                        <strong>{order.customerName}</strong>
+                        <p>{order.productName} · {order.createdAt}</p>
+                      </div>
+                      <span className={`badge ${order.priority?.toLowerCase()}`}>{order.priority}</span>
+                    </div>
+
+                    <div className="order-grid">
+                      <Field label="Estado">
+                        <select value={order.status} onChange={(e) => updateOrder(order.id, "status", e.target.value)}>
+                          {ORDER_STATUSES.map((item) => <option key={item}>{item}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Tipo de venta">
+                        <select value={order.saleType} onChange={(e) => updateOrder(order.id, "saleType", e.target.value)}>
+                          {SALE_TYPES.map((item) => <option key={item}>{item}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Método de pago">
+                        <select value={order.paymentMethod} onChange={(e) => updateOrder(order.id, "paymentMethod", e.target.value)}>
+                          {PAYMENT_METHODS.map((item) => <option key={item}>{item}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Anticipo">
+                        <input type="number" step="0.01" value={order.deposit} onChange={(e) => updateOrder(order.id, "deposit", e.target.value)} />
+                      </Field>
+                      <Field label="Total">
+                        <input type="number" step="0.01" value={order.total} onChange={(e) => updateOrder(order.id, "total", e.target.value)} />
+                      </Field>
+                      <Field label="Fecha prometida">
+                        <input type="date" value={order.promisedDate || ""} onChange={(e) => updateOrder(order.id, "promisedDate", e.target.value)} />
+                      </Field>
+                    </div>
+
+                    <div className="order-summary">
+                      <div><span>Total</span><strong>{money(order.total)}</strong></div>
+                      <div><span>Saldo</span><strong>{money(order.balance)}</strong></div>
+                      <div><span>Ganancia est.</span><strong>{money(order.profit)}</strong></div>
+                      <div><span>Pago</span><strong>{order.paymentStatus}</strong></div>
+                    </div>
+
+                    {order.contact && <p className="muted"><b>Contacto:</b> {order.contact}</p>}
+                    {order.notes && <p className="muted"><b>Notas:</b> {order.notes}</p>}
+
+                    <div className="product-actions">
+                      <button className="primary small" onClick={() => loadOrderToCalculator(order)}>Cargar/editar</button>
+                      <button className="danger small" onClick={() => removeOrder(order.id)}>Eliminar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </section>
+      )}
+
       {tab === "materials" && (
         <section className="single">
           <Card title="Materiales guardados">
@@ -454,9 +685,9 @@ function App() {
 
       {tab === "history" && (
         <section className="single">
-          <Card title="Historial de cotizaciones">
+          <Card title="Historial de cotizaciones simples">
             {quotes.length === 0 ? (
-              <p className="empty">Aún no has guardado cotizaciones.</p>
+              <p className="empty">Aún no has guardado cotizaciones simples.</p>
             ) : (
               <div className="quote-list">
                 {quotes.map((quote) => (
