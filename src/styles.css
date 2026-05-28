@@ -1000,3 +1000,24 @@ input:focus, select:focus, textarea:focus {
   .hero-actions { width: 100%; justify-content: stretch; }
   .hero-actions button { width: 100%; }
 }
+
+
+.customer-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.inline-action {
+  display: flex;
+  align-items: end;
+}
+
+.inline-action .mini-button {
+  width: 100%;
+  min-height: 47px;
+}
+
+@media (max-width: 860px) {
+  .customer-edit-grid { grid-template-columns: 1fr; }
+}

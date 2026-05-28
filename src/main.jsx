@@ -49,6 +49,8 @@ const DEFAULT_SUPPLIES = [
   { id: "premium-packaging", name: "Empaque premium", packageCost: 12.99, packageQuantity: 50 }
 ];
 
+const DEFAULT_CUSTOMERS = [];
+
 const ORDER_STATUSES = ["Cotizado", "Aceptado", "En producción", "Listo", "Entregado", "Pagado", "Cancelado", "Devolución"];
 const SALE_TYPES = ["En persona", "WhatsApp", "Instagram", "Facebook", "Etsy", "TikTok", "Referido", "Otro"];
 const PAYMENT_METHODS = ["No definido", "Cash", "Zelle", "Cash App", "Venmo", "Tarjeta", "Transferencia", "PayPal", "Otro"];
@@ -99,6 +101,7 @@ function App() {
   const [tab, setTab] = useState("dashboard");
   const [materials, setMaterials] = useState(() => loadStorage("materials", DEFAULT_MATERIALS));
   const [supplies, setSupplies] = useState(() => loadStorage("supplies", DEFAULT_SUPPLIES));
+  const [savedCustomers, setSavedCustomers] = useState(() => loadStorage("savedCustomers", DEFAULT_CUSTOMERS));
   const [quotes, setQuotes] = useState(() => loadStorage("quotes", []));
   const [products, setProducts] = useState(() => loadStorage("products", []));
   const [orders, setOrders] = useState(() => loadStorage("orders", []));
@@ -116,6 +119,7 @@ function App() {
   const [selectedMaterialId, setSelectedMaterialId] = useState(() => loadStorage("selectedMaterialId", DEFAULT_MATERIALS[0].id));
 
   const [orderDraft, setOrderDraft] = useState(() => loadStorage("orderDraft", {
+    customerId: "",
     customerName: "",
     contact: "",
     saleType: "En persona",
@@ -132,6 +136,7 @@ function App() {
 
   useEffect(() => localStorage.setItem("materials", JSON.stringify(materials)), [materials]);
   useEffect(() => localStorage.setItem("supplies", JSON.stringify(supplies)), [supplies]);
+  useEffect(() => localStorage.setItem("savedCustomers", JSON.stringify(savedCustomers)), [savedCustomers]);
   useEffect(() => localStorage.setItem("quotes", JSON.stringify(quotes)), [quotes]);
   useEffect(() => localStorage.setItem("products", JSON.stringify(products)), [products]);
   useEffect(() => localStorage.setItem("orders", JSON.stringify(orders)), [orders]);
@@ -215,31 +220,51 @@ function App() {
   const customers = useMemo(() => {
     const map = new Map();
 
-    orders.forEach((order) => {
-      const name = (order.customerName || "Cliente sin nombre").trim();
-      const key = name.toLowerCase();
+    savedCustomers.forEach((customer) => {
+      map.set(customer.id, {
+        ...customer,
+        orders: [],
+        totalSold: 0,
+        balance: 0,
+        profit: 0,
+        lastOrderDate: "",
+        lastProduct: ""
+      });
+    });
 
-      if (!map.has(key)) {
-        map.set(key, {
-          id: key,
-          name,
+    orders.forEach((order) => {
+      let customerId = order.customerId;
+
+      if (!customerId) {
+        const match = savedCustomers.find((customer) => customer.name.toLowerCase() === String(order.customerName || "").toLowerCase());
+        customerId = match?.id || `legacy-${String(order.customerName || "cliente-sin-nombre").toLowerCase()}`;
+      }
+
+      if (!map.has(customerId)) {
+        map.set(customerId, {
+          id: customerId,
+          name: order.customerName || "Cliente sin nombre",
           contact: order.contact || "",
+          platform: order.saleType || "",
+          notes: "",
+          createdAt: order.createdAt || todayISO(),
           orders: [],
           totalSold: 0,
           balance: 0,
           profit: 0,
-          lastOrderDate: order.createdAt || "",
-          lastProduct: order.productName || ""
+          lastOrderDate: "",
+          lastProduct: ""
         });
       }
 
-      const customer = map.get(key);
+      const customer = map.get(customerId);
       customer.orders.push(order);
       customer.totalSold += numberValue(order.total);
       customer.balance += numberValue(order.balance);
       customer.profit += numberValue(order.profit);
 
       if (!customer.contact && order.contact) customer.contact = order.contact;
+      if (!customer.platform && order.saleType) customer.platform = order.saleType;
 
       if (!customer.lastOrderDate || String(order.createdAt) >= String(customer.lastOrderDate)) {
         customer.lastOrderDate = order.createdAt || "";
@@ -247,8 +272,12 @@ function App() {
       }
     });
 
-    return Array.from(map.values()).sort((a, b) => b.lastOrderDate.localeCompare(a.lastOrderDate));
-  }, [orders]);
+    return Array.from(map.values()).sort((a, b) => {
+      const dateCompare = String(b.lastOrderDate || b.createdAt || "").localeCompare(String(a.lastOrderDate || a.createdAt || ""));
+      if (dateCompare !== 0) return dateCompare;
+      return a.name.localeCompare(b.name);
+    });
+  }, [orders, savedCustomers]);
 
   const dashboard = useMemo(() => {
     const totals = orders.reduce((acc, order) => {
@@ -306,11 +335,114 @@ function App() {
     };
   }, [orders, customers]);
 
+  const addCustomer = () => {
+    const id = crypto.randomUUID();
+    setSavedCustomers((current) => [
+      ...current,
+      {
+        id,
+        name: "Nuevo cliente",
+        contact: "",
+        platform: "En persona",
+        notes: "",
+        createdAt: todayISO()
+      }
+    ]);
+  };
+
+  const updateCustomer = (id, key, value) => {
+    setSavedCustomers((current) => current.map((customer) => customer.id === id ? { ...customer, [key]: value } : customer));
+    if (key === "name" || key === "contact" || key === "platform") {
+      setOrders((current) => current.map((order) => {
+        if (order.customerId !== id) return order;
+        const updated = { ...order };
+        if (key === "name") updated.customerName = value;
+        if (key === "contact") updated.contact = value;
+        if (key === "platform") updated.saleType = value;
+        return updated;
+      }));
+    }
+  };
+
+  const removeCustomer = (id) => {
+    const relatedOrders = orders.filter((order) => order.customerId === id).length;
+    const message = relatedOrders > 0
+      ? `Este cliente tiene ${relatedOrders} pedido(s). Se eliminará solo el cliente guardado, no los pedidos. ¿Continuar?`
+      : "¿Eliminar este cliente guardado?";
+    if (!confirm(message)) return;
+    setSavedCustomers((current) => current.filter((customer) => customer.id !== id));
+  };
+
+  const selectCustomerForDraft = (customerId) => {
+    if (!customerId) {
+      setOrderDraft((current) => ({
+        ...current,
+        customerId: "",
+        customerName: "",
+        contact: ""
+      }));
+      return;
+    }
+
+    const customer = savedCustomers.find((item) => item.id === customerId);
+    if (!customer) return;
+
+    setOrderDraft((current) => ({
+      ...current,
+      customerId: customer.id,
+      customerName: customer.name,
+      contact: customer.contact || "",
+      saleType: customer.platform || current.saleType
+    }));
+  };
+
+  const saveDraftCustomer = () => {
+    const name = orderDraft.customerName?.trim();
+    if (!name) {
+      alert("Escribe el nombre del cliente primero.");
+      return;
+    }
+
+    if (orderDraft.customerId) {
+      updateCustomer(orderDraft.customerId, "name", name);
+      updateCustomer(orderDraft.customerId, "contact", orderDraft.contact || "");
+      updateCustomer(orderDraft.customerId, "platform", orderDraft.saleType || "En persona");
+      return;
+    }
+
+    const existing = savedCustomers.find((customer) => customer.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      setOrderDraft((current) => ({
+        ...current,
+        customerId: existing.id,
+        customerName: existing.name,
+        contact: current.contact || existing.contact || "",
+        saleType: existing.platform || current.saleType
+      }));
+      return;
+    }
+
+    const id = crypto.randomUUID();
+    const customer = {
+      id,
+      name,
+      contact: orderDraft.contact || "",
+      platform: orderDraft.saleType || "En persona",
+      notes: "",
+      createdAt: todayISO()
+    };
+
+    setSavedCustomers((current) => [customer, ...current]);
+    setOrderDraft((current) => ({ ...current, customerId: id }));
+  };
+
   const loadCustomerToDraft = (customer) => {
     setOrderDraft((current) => ({
       ...current,
+      customerId: customer.id.startsWith("legacy-") ? "" : customer.id,
       customerName: customer.name,
-      contact: customer.contact || current.contact
+      contact: customer.contact || current.contact,
+      saleType: customer.platform || current.saleType
     }));
     setTab("calculator");
   };
@@ -355,6 +487,7 @@ function App() {
 
   const resetOrderDraft = () => {
     setOrderDraft({
+      customerId: "",
       customerName: "",
       contact: "",
       saleType: "En persona",
@@ -581,10 +714,34 @@ function App() {
 
   const saveOrder = () => {
     const productName = form.productName?.trim() || "Producto sin nombre";
+    const customerName = orderDraft.customerName?.trim() || "Cliente sin nombre";
+    let customerId = orderDraft.customerId;
+
+    if (!customerId) {
+      const existing = savedCustomers.find((customer) => customer.name.toLowerCase() === customerName.toLowerCase());
+      if (existing) {
+        customerId = existing.id;
+      } else {
+        customerId = crypto.randomUUID();
+        setSavedCustomers((current) => [
+          {
+            id: customerId,
+            name: customerName,
+            contact: orderDraft.contact || "",
+            platform: orderDraft.saleType || "En persona",
+            notes: "",
+            createdAt: todayISO()
+          },
+          ...current
+        ]);
+      }
+    }
+
     const order = {
       id: crypto.randomUUID(),
       createdAt: todayISO(),
-      customerName: orderDraft.customerName?.trim() || "Cliente sin nombre",
+      customerId,
+      customerName,
       contact: orderDraft.contact || "",
       productName,
       materialName: selectedMaterial?.name || "Material",
@@ -632,6 +789,7 @@ function App() {
     setSelectedMaterialId(order.snapshot.selectedMaterialId);
     setExtraMaterials(order.snapshot.extraMaterials || []);
     setOrderDraft({
+      customerId: order.customerId || "",
       customerName: order.customerName,
       contact: order.contact,
       saleType: order.saleType,
@@ -652,6 +810,7 @@ function App() {
     if (!confirm("¿Seguro que quieres borrar historial y restaurar valores?")) return;
     setMaterials(DEFAULT_MATERIALS);
     setSupplies(DEFAULT_SUPPLIES);
+    setSavedCustomers(DEFAULT_CUSTOMERS);
     setQuotes([]);
     setProducts([]);
     setOrders([]);
@@ -659,6 +818,7 @@ function App() {
     setForm(DEFAULT_FORM);
     setSelectedMaterialId(DEFAULT_MATERIALS[0].id);
     setOrderDraft({
+      customerId: "",
       customerName: "",
       contact: "",
       saleType: "En persona",
@@ -675,9 +835,9 @@ function App() {
     <main className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">MVP v8 · Insumos</p>
+          <p className="eyebrow">MVP v8.1 · Clientes reales</p>
           <h1>Calculadora de Precios 3D</h1>
-          <p>Cotiza, guarda pedidos, administra insumos frecuentes y limpia formularios por sección.</p>
+          <p>Cotiza, guarda pedidos, administra insumos y conserva clientes aunque elimines pedidos.</p>
         </div>
         <div className="hero-actions">
           <button className="ghost" onClick={resetCalculatorForm}>Limpiar formulario</button>
@@ -980,12 +1140,23 @@ function App() {
               </div>
               <p className="muted">Llena esto cuando quieras convertir la cotización actual en pedido/cotización para un cliente.</p>
               <div className="grid2">
+                <Field label="Cliente guardado">
+                  <select value={orderDraft.customerId || ""} onChange={(e) => selectCustomerForDraft(e.target.value)}>
+                    <option value="">Manual / cliente nuevo</option>
+                    {savedCustomers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>{customer.name}</option>
+                    ))}
+                  </select>
+                </Field>
                 <Field label="Cliente">
                   <input value={orderDraft.customerName} onChange={(e) => updateOrderDraft("customerName", e.target.value)} placeholder="Nombre del cliente" />
                 </Field>
                 <Field label="Contacto">
                   <input value={orderDraft.contact} onChange={(e) => updateOrderDraft("contact", e.target.value)} placeholder="Teléfono, Instagram, WhatsApp..." />
                 </Field>
+                <div className="inline-action">
+                  <button className="mini-button" onClick={saveDraftCustomer}>Guardar/actualizar cliente</button>
+                </div>
                 <Field label="Tipo de venta">
                   <select value={orderDraft.saleType} onChange={(e) => updateOrderDraft("saleType", e.target.value)}>
                     {SALE_TYPES.map((item) => <option key={item}>{item}</option>)}
@@ -1175,9 +1346,11 @@ function App() {
       {tab === "customers" && (
         <section className="single">
           <Card title="Clientes">
-            <p className="muted">La lista se crea automáticamente usando los pedidos guardados. Si un cliente tiene varios pedidos, aquí se agrupan.</p>
+            <p className="muted">Clientes guardados independientes. Si borras pedidos, el cliente se queda guardado.</p>
+            <button className="secondary" onClick={addCustomer}>Agregar cliente</button>
+
             {customers.length === 0 ? (
-              <p className="empty">Aún no hay clientes. Guarda pedidos para que aparezcan aquí.</p>
+              <p className="empty">Aún no hay clientes guardados.</p>
             ) : (
               <div className="customer-list">
                 {customers.map((customer) => (
@@ -1190,6 +1363,28 @@ function App() {
                       <span className="badge">{customer.orders.length} pedido{customer.orders.length === 1 ? "" : "s"}</span>
                     </div>
 
+                    {!customer.id.startsWith("legacy-") && (
+                      <div className="customer-edit-grid">
+                        <Field label="Nombre">
+                          <input value={customer.name} onChange={(e) => updateCustomer(customer.id, "name", e.target.value)} />
+                        </Field>
+                        <Field label="Contacto">
+                          <input value={customer.contact || ""} onChange={(e) => updateCustomer(customer.id, "contact", e.target.value)} />
+                        </Field>
+                        <Field label="Plataforma principal">
+                          <select value={customer.platform || "En persona"} onChange={(e) => updateCustomer(customer.id, "platform", e.target.value)}>
+                            {SALE_TYPES.map((item) => <option key={item}>{item}</option>)}
+                          </select>
+                        </Field>
+                      </div>
+                    )}
+
+                    {!customer.id.startsWith("legacy-") && (
+                      <Field label="Notas del cliente">
+                        <textarea value={customer.notes || ""} onChange={(e) => updateCustomer(customer.id, "notes", e.target.value)} placeholder="Preferencias, detalles, historial, etc." />
+                      </Field>
+                    )}
+
                     <div className="customer-summary">
                       <div><span>Total vendido</span><strong>{money(customer.totalSold)}</strong></div>
                       <div><span>Saldo pendiente</span><strong>{money(customer.balance)}</strong></div>
@@ -1200,58 +1395,34 @@ function App() {
                     <details className="customer-details">
                       <summary>Ver pedidos del cliente</summary>
                       <div className="customer-orders">
-                        {customer.orders.map((order) => (
-                          <div className="customer-order-row" key={order.id}>
-                            <div>
-                              <strong>{order.productName}</strong>
-                              <p>{order.createdAt} · {order.status} · {order.paymentStatus}</p>
+                        {customer.orders.length === 0 ? (
+                          <p className="empty">Este cliente todavía no tiene pedidos.</p>
+                        ) : (
+                          customer.orders.map((order) => (
+                            <div className="customer-order-row" key={order.id}>
+                              <div>
+                                <strong>{order.productName}</strong>
+                                <p>{order.createdAt} · {order.status} · {order.paymentStatus}</p>
+                              </div>
+                              <div className="customer-order-money">
+                                <span>Total</span>
+                                <strong>{money(order.total)}</strong>
+                              </div>
+                              <button className="secondary small" onClick={() => loadOrderToCalculator(order)}>Cargar</button>
                             </div>
-                            <div className="customer-order-money">
-                              <span>Total</span>
-                              <strong>{money(order.total)}</strong>
-                            </div>
-                            <button className="secondary small" onClick={() => loadOrderToCalculator(order)}>Cargar</button>
-                          </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                     </details>
 
                     <div className="product-actions">
                       <button className="primary small" onClick={() => loadCustomerToDraft(customer)}>Nuevo pedido para este cliente</button>
+                      {!customer.id.startsWith("legacy-") && <button className="danger small" onClick={() => removeCustomer(customer.id)}>Eliminar cliente</button>}
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </Card>
-        </section>
-      )}
-
-      {tab === "supplies" && (
-        <section className="single">
-          <Card title="Insumos / Extras guardados">
-            <p className="muted">Guarda cosas que compras por paquete: argollas, imanes, bolsas, stickers, LEDs, tornillos, etc. La app calcula el costo unitario automático.</p>
-            <button className="secondary" onClick={addSupply}>Agregar insumo</button>
-            <div className="supply-list">
-              {supplies.map((supply) => (
-                <div className="supply-card" key={supply.id}>
-                  <Field label="Nombre del insumo">
-                    <input value={supply.name} onChange={(e) => updateSupply(supply.id, "name", e.target.value)} />
-                  </Field>
-                  <Field label="Costo del paquete">
-                    <input type="number" step="0.01" value={supply.packageCost} onChange={(e) => updateSupply(supply.id, "packageCost", e.target.value)} />
-                  </Field>
-                  <Field label="Cantidad por paquete">
-                    <input type="number" step="1" value={supply.packageQuantity} onChange={(e) => updateSupply(supply.id, "packageQuantity", e.target.value)} />
-                  </Field>
-                  <div className="unit-cost-box">
-                    <span>Costo unitario</span>
-                    <strong>{money(supplyUnitCost(supply))}</strong>
-                  </div>
-                  <button className="danger" onClick={() => removeSupply(supply.id)}>Eliminar</button>
-                </div>
-              ))}
-            </div>
           </Card>
         </section>
       )}
