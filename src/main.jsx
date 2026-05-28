@@ -14,6 +14,8 @@ const DEFAULT_FORM = {
   productionMode: "individual",
   batchProducedQty: 1,
   customerQty: 1,
+  batchPricingMode: "retail",
+  retailUnitPrice: 0,
   modelGrams: 24,
   purgeGrams: 6,
   printHours: 2,
@@ -119,7 +121,9 @@ function App() {
       premiumMarginPercent: stored.premiumMarginPercent ?? 70,
       productionMode: stored.productionMode ?? "individual",
       batchProducedQty: stored.batchProducedQty ?? 1,
-      customerQty: stored.customerQty ?? 1
+      customerQty: stored.customerQty ?? 1,
+      batchPricingMode: stored.batchPricingMode ?? "retail",
+      retailUnitPrice: stored.retailUnitPrice ?? 0
     };
   });
   const [selectedMaterialId, setSelectedMaterialId] = useState(() => loadStorage("selectedMaterialId", DEFAULT_MATERIALS[0].id));
@@ -204,8 +208,29 @@ function App() {
     const unitRealCost = productionUnitCost + variableOrderCostPerUnit;
 
     const minimumUnitPrice = roundToQuarter(priceFromMargin(unitRealCost, form.minimumMarginPercent));
-    const recommendedUnitPrice = roundToQuarter(priceFromMargin(unitRealCost, form.recommendedMarginPercent));
+    const batchRecommendedUnitPrice = roundToQuarter(priceFromMargin(unitRealCost, form.recommendedMarginPercent));
     const premiumUnitPrice = roundToQuarter(priceFromMargin(unitRealCost, form.premiumMarginPercent));
+
+    const retailUnitPriceInput = numberValue(form.retailUnitPrice);
+    const retailUnitPrice = retailUnitPriceInput > 0 ? retailUnitPriceInput : batchRecommendedUnitPrice;
+
+    let recommendedUnitPrice = batchRecommendedUnitPrice;
+    let pricingLabel = "Costo lote + margen";
+
+    if (form.productionMode === "batch" && form.batchPricingMode === "retail") {
+      recommendedUnitPrice = retailUnitPrice;
+      pricingLabel = "Precio individual público";
+    }
+
+    if (form.productionMode === "batch" && form.batchPricingMode === "wholesale") {
+      const discount =
+        customerQty >= 20 ? numberValue(form.wholesale20Discount) :
+        customerQty >= 10 ? numberValue(form.wholesale10Discount) :
+        customerQty >= 5 ? numberValue(form.wholesale5Discount) :
+        0;
+      recommendedUnitPrice = roundToQuarter(retailUnitPrice * (1 - discount / 100));
+      pricingLabel = discount > 0 ? `Mayoreo con ${discount}% desc.` : "Precio individual público";
+    }
 
     const minimumPrice = roundToQuarter(minimumUnitPrice * customerQty);
     const recommendedPrice = roundToQuarter(recommendedUnitPrice * customerQty);
@@ -222,7 +247,10 @@ function App() {
       unitRealCost,
       minimumUnitPrice,
       recommendedUnitPrice,
+      batchRecommendedUnitPrice,
+      retailUnitPrice,
       premiumUnitPrice,
+      pricingLabel,
       materialCost,
       machineCost,
       laborCost,
@@ -491,6 +519,8 @@ function App() {
       productionMode: "individual",
       batchProducedQty: 1,
       customerQty: 1,
+      batchPricingMode: "retail",
+      retailUnitPrice: 0,
       modelGrams: 0,
       purgeGrams: 0
     }));
@@ -723,6 +753,7 @@ function App() {
       `Producto: ${order.productName}`,
       `Cantidad cliente: ${order.quantity || 1}`,
       `Modo producción: ${order.productionMode === "batch" ? "Lote / stock" : "Individual"}`,
+      `Estrategia precio: ${order.pricingLabel || "Normal"}`,
       `Material: ${order.materialName}`,
       `Venta: ${order.saleType}`,
       `Estado: ${order.status}`,
@@ -793,6 +824,8 @@ function App() {
       producedQty: result.producedQty,
       unitRealCost: result.unitRealCost,
       recommendedUnitPrice: result.recommendedUnitPrice,
+      pricingLabel: result.pricingLabel,
+      retailUnitPrice: result.retailUnitPrice,
       saleType: orderDraft.saleType,
       status: orderDraft.status,
       paymentMethod: orderDraft.paymentMethod,
@@ -883,9 +916,9 @@ function App() {
     <main className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">MVP v9.2 · Modo lote</p>
+          <p className="eyebrow">MVP v9.2.1 · Lote corregido</p>
           <h1>Calculadora de Precios 3D</h1>
-          <p>Cotiza piezas individuales o producidas en lote, con costo unitario real y precio al cliente.</p>
+          <p>Cotiza lote/stock separando costo interno real y precio público al cliente.</p>
         </div>
         <div className="hero-actions">
           <button className="ghost" onClick={resetCalculatorForm}>Limpiar formulario</button>
@@ -1066,7 +1099,7 @@ function App() {
             </Card>
 
             <Card title="Modo de cotización">
-              <p className="muted">Individual: cotizas una pieza normal. Lote/stock: los datos del laminador son del lote completo y la app divide costo por pieza.</p>
+              <p className="muted">Individual calcula una pieza normal. Lote/stock separa el costo interno real del precio público que le das al cliente.</p>
               <div className="grid2">
                 <Field label="Tipo de cotización">
                   <select value={form.productionMode} onChange={(e) => update("productionMode", e.target.value)}>
@@ -1082,11 +1115,25 @@ function App() {
                     <input type="number" min="1" step="1" value={form.batchProducedQty} onChange={(e) => update("batchProducedQty", e.target.value)} />
                   </Field>
                 )}
+                {form.productionMode === "batch" && (
+                  <Field label="Estrategia de precio">
+                    <select value={form.batchPricingMode} onChange={(e) => update("batchPricingMode", e.target.value)}>
+                      <option value="retail">Precio individual público</option>
+                      <option value="wholesale">Mayoreo según cantidad</option>
+                      <option value="batch-margin">Costo lote + margen</option>
+                    </select>
+                  </Field>
+                )}
+                {form.productionMode === "batch" && (
+                  <Field label="Precio público individual c/u">
+                    <input type="number" min="0" step="0.25" value={form.retailUnitPrice} onChange={(e) => update("retailUnitPrice", e.target.value)} placeholder="Ej. 8.75" />
+                  </Field>
+                )}
               </div>
               {form.productionMode === "batch" && (
                 <div className="batch-explain">
-                  <strong>Cómo se calcula:</strong>
-                  <p>Filamento, tiempo, máquina, mano de obra y AMS se dividen entre las piezas producidas. Insumos, empaque y extras se multiplican por las piezas que compra el cliente.</p>
+                  <strong>Regla de venta:</strong>
+                  <p>Si el cliente compra 1, usa precio individual público. El costo de lote queda como dato interno para saber tu ganancia real. Solo usa costo lote + margen si quieres vender barato por stock/mayoreo.</p>
                 </div>
               )}
             </Card>
@@ -1286,13 +1333,15 @@ function App() {
                 <div className="batch-result-box">
                   <div><span>Costo total lote</span><strong>{money(result.productionRealCost)}</strong></div>
                   <div><span>Piezas lote</span><strong>{result.producedQty}</strong></div>
-                  <div><span>Costo producción por pieza</span><strong>{money(result.productionUnitCost)}</strong></div>
+                  <div><span>Costo interno por pieza</span><strong>{money(result.productionUnitCost)}</strong></div>
                   <div><span>Cliente compra</span><strong>{result.customerQty}</strong></div>
+                  <div><span>Precio lote + margen c/u</span><strong>{money(result.batchRecommendedUnitPrice)}</strong></div>
+                  <div><span>Estrategia de venta</span><strong>{result.pricingLabel}</strong></div>
                 </div>
               )}
 
               <div className="big-number">
-                <span>Costo real del cliente</span>
+                <span>Costo real estimado</span>
                 <strong>{money(result.realCost)}</strong>
               </div>
 
@@ -1594,6 +1643,7 @@ function App() {
                     <tr><td>Producto</td><td>{printOrder.productName}</td></tr>
                     <tr><td>Cantidad</td><td>{printOrder.quantity || 1}</td></tr>
                     <tr><td>Modo producción</td><td>{printOrder.productionMode === "batch" ? "Lote / stock" : "Individual"}</td></tr>
+                    <tr><td>Estrategia de precio</td><td>{printOrder.pricingLabel || "Normal"}</td></tr>
                     <tr><td>Material</td><td>{printOrder.materialName}</td></tr>
                     <tr><td>Tipo de venta</td><td>{printOrder.saleType}</td></tr>
                     <tr><td>Estado</td><td>{printOrder.status}</td></tr>
