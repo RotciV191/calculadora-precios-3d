@@ -1,17 +1,21 @@
-# Calculadora de Precios 3D v6
+# Calculadora de Precios 3D v7
 
-App web para cotizar piezas de impresión 3D, guardar pedidos, copiar cotizaciones, generar vista imprimible y revisar clientes.
+App web para cotizar piezas de impresión 3D, guardar pedidos, clientes y ver dashboard de negocio.
 
-## Nuevas funciones v6
+## Nuevas funciones v7
 
-- Nueva pestaña: Clientes
-- Clientes generados automáticamente desde pedidos
-- Total vendido por cliente
-- Saldo pendiente por cliente
-- Ganancia estimada por cliente
-- Historial de pedidos por cliente
-- Botón para crear nuevo pedido para un cliente existente
-- Botón para cargar pedidos del cliente a la calculadora
+- Nueva pestaña: Dashboard
+- Ventas totales
+- Ganancia estimada
+- Saldo pendiente por cobrar
+- Total de pedidos
+- Total de clientes
+- Anticipos recibidos
+- Pedidos activos
+- Próximas entregas
+- Estado de pedidos
+- Productos con más venta
+- Alertas rápidas
 
 ## Publicar actualización
 
