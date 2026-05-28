@@ -1,21 +1,30 @@
-# Calculadora de Precios 3D v7
+# Calculadora de Precios 3D v8
 
-App web para cotizar piezas de impresión 3D, guardar pedidos, clientes y ver dashboard de negocio.
+App web para cotizar piezas de impresión 3D con dashboard, pedidos, clientes e insumos.
 
-## Nuevas funciones v7
+## Nuevas funciones v8 / Fase 9.1
 
-- Nueva pestaña: Dashboard
-- Ventas totales
-- Ganancia estimada
-- Saldo pendiente por cobrar
-- Total de pedidos
-- Total de clientes
-- Anticipos recibidos
-- Pedidos activos
-- Próximas entregas
-- Estado de pedidos
-- Productos con más venta
-- Alertas rápidas
+- Reordenamiento en Calculadora:
+  - Materiales extra sube antes de Margen y precio
+  - Margen y precio baja después de Materiales extra
+- Nueva pestaña: Insumos
+- Insumos guardados con:
+  - nombre
+  - costo del paquete
+  - cantidad por paquete
+  - costo unitario automático
+- Materiales extra puede usar insumos guardados
+- Chips rápidos para agregar insumos frecuentes
+- Opción manual si el insumo no existe
+- Botones de limpieza:
+  - Limpiar formulario completo
+  - Limpiar datos de pieza
+  - Limpiar producción
+  - Limpiar materiales extra
+  - Restaurar márgenes
+  - Limpiar datos del pedido
+- Renombrado botón fuerte:
+  - Restaurar app
 
 ## Publicar actualización
 
