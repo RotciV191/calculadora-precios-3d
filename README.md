@@ -1,14 +1,18 @@
-# Calculadora de Precios 3D v4
+# Calculadora de Precios 3D v4.5
 
 App web para cotizar piezas de impresión 3D, guardar pedidos y copiar cotizaciones listas para enviar.
 
-## Nuevas funciones v4
+## Nuevas funciones v4.5
 
-- Botón Copiar cotización en cada pedido
-- Botón Copiar resumen interno
-- Vista previa del mensaje para cliente
-- Mensaje con producto, total, anticipo, saldo, estado, fecha y notas
-- Fallback manual si el navegador bloquea el portapapeles
+- Estado nuevo: Devolución
+- Nueva sección: Margen y precio
+- Márgenes editables:
+  - Margen mínimo (%)
+  - Margen recomendado (%)
+  - Margen premium (%)
+- Cálculo con margen real:
+  - Precio = Costo real ÷ (1 - margen)
+- Resumen interno incluye margen estimado
 
 ## Publicar actualización
 
