@@ -1,18 +1,25 @@
-# Calculadora de Precios 3D v8.1
+# Calculadora de Precios 3D v9.2
 
-App web para cotizar piezas de impresión 3D con clientes reales guardados.
+App web para cotizar piezas individuales o producidas en lote/stock.
 
-## Nuevas funciones v8.1 / Fase 8.1
+## Nuevas funciones v9.2
 
-- Clientes guardados independientes de los pedidos
-- Si eliminas pedidos, el cliente permanece
-- Crear cliente manualmente
-- Editar nombre, contacto, plataforma y notas
-- Eliminar cliente sin eliminar pedidos
-- Selector de cliente guardado en Datos del pedido
-- Botón Guardar/actualizar cliente desde la calculadora
-- Pedidos se vinculan a customerId
-- Clientes antiguos desde pedidos siguen apareciendo como legacy si no estaban guardados
+- Nueva sección: Modo de cotización
+- Modo Individual
+- Modo Lote / stock
+- Piezas producidas en el lote
+- Piezas que compra el cliente
+- Costo total del lote
+- Costo de producción por pieza
+- Costo real del cliente
+- Precio recomendado total y por pieza
+- Pedidos guardan cantidad, modo de producción y costo unitario
+
+## Lógica del modo lote
+
+- Filamento, tiempo, máquina, mano de obra y AMS se dividen entre las piezas producidas.
+- Insumos, empaque y extras se multiplican por las piezas que compra el cliente.
+- El precio final se calcula con el margen real editable.
 
 ## Publicar actualización
 
