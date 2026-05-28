@@ -79,7 +79,7 @@ function priceFromMargin(cost, marginPercent) {
 }
 
 function App() {
-  const [tab, setTab] = useState("calculator");
+  const [tab, setTab] = useState("dashboard");
   const [materials, setMaterials] = useState(() => loadStorage("materials", DEFAULT_MATERIALS));
   const [quotes, setQuotes] = useState(() => loadStorage("quotes", []));
   const [products, setProducts] = useState(() => loadStorage("products", []));
@@ -230,6 +230,62 @@ function App() {
 
     return Array.from(map.values()).sort((a, b) => b.lastOrderDate.localeCompare(a.lastOrderDate));
   }, [orders]);
+
+  const dashboard = useMemo(() => {
+    const totals = orders.reduce((acc, order) => {
+      acc.totalSold += numberValue(order.total);
+      acc.balance += numberValue(order.balance);
+      acc.profit += numberValue(order.profit);
+      acc.realCost += numberValue(order.realCost);
+      acc.deposit += numberValue(order.deposit);
+      return acc;
+    }, { totalSold: 0, balance: 0, profit: 0, realCost: 0, deposit: 0 });
+
+    const byStatus = ORDER_STATUSES.map((status) => ({
+      status,
+      count: orders.filter((order) => order.status === status).length
+    })).filter((item) => item.count > 0);
+
+    const activeOrders = orders.filter((order) => !["Entregado", "Pagado", "Cancelado", "Devolución"].includes(order.status));
+    const urgentOrders = orders.filter((order) => order.priority === "Urgente" || order.priority === "Alta");
+
+    const upcomingOrders = orders
+      .filter((order) => order.promisedDate && !["Entregado", "Pagado", "Cancelado", "Devolución"].includes(order.status))
+      .sort((a, b) => String(a.promisedDate).localeCompare(String(b.promisedDate)))
+      .slice(0, 5);
+
+    const productMap = new Map();
+    orders.forEach((order) => {
+      const key = (order.productName || "Producto sin nombre").trim().toLowerCase();
+      if (!productMap.has(key)) {
+        productMap.set(key, {
+          name: order.productName || "Producto sin nombre",
+          count: 0,
+          total: 0,
+          profit: 0
+        });
+      }
+      const item = productMap.get(key);
+      item.count += 1;
+      item.total += numberValue(order.total);
+      item.profit += numberValue(order.profit);
+    });
+
+    const topProducts = Array.from(productMap.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+
+    return {
+      ...totals,
+      orderCount: orders.length,
+      customerCount: customers.length,
+      activeOrders,
+      urgentOrders,
+      upcomingOrders,
+      byStatus,
+      topProducts
+    };
+  }, [orders, customers]);
 
   const loadCustomerToDraft = (customer) => {
     setOrderDraft((current) => ({
@@ -494,14 +550,15 @@ function App() {
     <main className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">MVP v6 · Clientes</p>
+          <p className="eyebrow">MVP v7 · Dashboard</p>
           <h1>Calculadora de Precios 3D</h1>
-          <p>Cotiza, guarda pedidos, genera cotizaciones y revisa clientes con historial, saldo y ventas.</p>
+          <p>Cotiza, guarda pedidos, revisa clientes y mira un resumen general de ventas, saldos y producción.</p>
         </div>
         <button className="ghost" onClick={resetAll}>Restaurar</button>
       </header>
 
       <nav className="tabs">
+        <button className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}>Dashboard</button>
         <button className={tab === "calculator" ? "active" : ""} onClick={() => setTab("calculator")}>Calculadora</button>
         <button className={tab === "products" ? "active" : ""} onClick={() => setTab("products")}>Productos</button>
         <button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>Pedidos</button>
@@ -509,6 +566,133 @@ function App() {
         <button className={tab === "materials" ? "active" : ""} onClick={() => setTab("materials")}>Materiales</button>
         <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>Historial</button>
       </nav>
+
+      {tab === "dashboard" && (
+        <section className="single">
+          <div className="dashboard-grid">
+            <Card title="Resumen general">
+              <div className="metric-grid">
+                <div className="metric-card">
+                  <span>Ventas totales</span>
+                  <strong>{money(dashboard.totalSold)}</strong>
+                </div>
+                <div className="metric-card">
+                  <span>Ganancia estimada</span>
+                  <strong>{money(dashboard.profit)}</strong>
+                </div>
+                <div className="metric-card warning">
+                  <span>Saldo por cobrar</span>
+                  <strong>{money(dashboard.balance)}</strong>
+                </div>
+                <div className="metric-card">
+                  <span>Pedidos</span>
+                  <strong>{dashboard.orderCount}</strong>
+                </div>
+                <div className="metric-card">
+                  <span>Clientes</span>
+                  <strong>{dashboard.customerCount}</strong>
+                </div>
+                <div className="metric-card">
+                  <span>Anticipos recibidos</span>
+                  <strong>{money(dashboard.deposit)}</strong>
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Pedidos activos">
+              {dashboard.activeOrders.length === 0 ? (
+                <p className="empty">No tienes pedidos activos.</p>
+              ) : (
+                <div className="compact-list">
+                  {dashboard.activeOrders.slice(0, 6).map((order) => (
+                    <div className="compact-row" key={order.id}>
+                      <div>
+                        <strong>{order.customerName}</strong>
+                        <p>{order.productName} · {order.status}</p>
+                      </div>
+                      <div className="compact-money">
+                        <span>Saldo</span>
+                        <strong>{money(order.balance)}</strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+
+          <div className="dashboard-grid">
+            <Card title="Estado de pedidos">
+              {dashboard.byStatus.length === 0 ? (
+                <p className="empty">Aún no hay estados para mostrar.</p>
+              ) : (
+                <div className="status-list">
+                  {dashboard.byStatus.map((item) => (
+                    <div className="status-row" key={item.status}>
+                      <span>{item.status}</span>
+                      <strong>{item.count}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            <Card title="Próximas entregas">
+              {dashboard.upcomingOrders.length === 0 ? (
+                <p className="empty">No hay entregas programadas.</p>
+              ) : (
+                <div className="compact-list">
+                  {dashboard.upcomingOrders.map((order) => (
+                    <div className="compact-row" key={order.id}>
+                      <div>
+                        <strong>{formatDate(order.promisedDate)}</strong>
+                        <p>{order.customerName} · {order.productName}</p>
+                      </div>
+                      <span className={`badge ${order.priority?.toLowerCase()}`}>{order.priority}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+
+          <div className="dashboard-grid">
+            <Card title="Productos con más venta">
+              {dashboard.topProducts.length === 0 ? (
+                <p className="empty">Aún no hay productos vendidos.</p>
+              ) : (
+                <div className="compact-list">
+                  {dashboard.topProducts.map((product) => (
+                    <div className="compact-row" key={product.name}>
+                      <div>
+                        <strong>{product.name}</strong>
+                        <p>{product.count} pedido{product.count === 1 ? "" : "s"} · Ganancia {money(product.profit)}</p>
+                      </div>
+                      <div className="compact-money">
+                        <span>Total</span>
+                        <strong>{money(product.total)}</strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            <Card title="Alertas rápidas">
+              <div className="alert-list">
+                <div className={dashboard.balance > 0 ? "alert-card warning" : "alert-card"}>
+                  <strong>{dashboard.balance > 0 ? "Hay saldo pendiente por cobrar" : "Sin saldo pendiente"}</strong>
+                  <p>{dashboard.balance > 0 ? `Tienes ${money(dashboard.balance)} pendientes.` : "Todo está cobrado por ahora."}</p>
+                </div>
+                <div className={dashboard.urgentOrders.length > 0 ? "alert-card danger-alert" : "alert-card"}>
+                  <strong>{dashboard.urgentOrders.length > 0 ? "Pedidos de prioridad alta/urgente" : "Sin urgencias"}</strong>
+                  <p>{dashboard.urgentOrders.length > 0 ? `${dashboard.urgentOrders.length} pedido(s) requieren atención.` : "No hay pedidos marcados como alta prioridad."}</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </section>
+      )}
 
       {tab === "calculator" && (
         <section className="layout">
