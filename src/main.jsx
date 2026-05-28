@@ -193,6 +193,53 @@ function App() {
     return { total, deposit, balance, paymentStatus };
   }, [result.recommendedPrice, orderDraft.deposit]);
 
+  const customers = useMemo(() => {
+    const map = new Map();
+
+    orders.forEach((order) => {
+      const name = (order.customerName || "Cliente sin nombre").trim();
+      const key = name.toLowerCase();
+
+      if (!map.has(key)) {
+        map.set(key, {
+          id: key,
+          name,
+          contact: order.contact || "",
+          orders: [],
+          totalSold: 0,
+          balance: 0,
+          profit: 0,
+          lastOrderDate: order.createdAt || "",
+          lastProduct: order.productName || ""
+        });
+      }
+
+      const customer = map.get(key);
+      customer.orders.push(order);
+      customer.totalSold += numberValue(order.total);
+      customer.balance += numberValue(order.balance);
+      customer.profit += numberValue(order.profit);
+
+      if (!customer.contact && order.contact) customer.contact = order.contact;
+
+      if (!customer.lastOrderDate || String(order.createdAt) >= String(customer.lastOrderDate)) {
+        customer.lastOrderDate = order.createdAt || "";
+        customer.lastProduct = order.productName || "";
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.lastOrderDate.localeCompare(a.lastOrderDate));
+  }, [orders]);
+
+  const loadCustomerToDraft = (customer) => {
+    setOrderDraft((current) => ({
+      ...current,
+      customerName: customer.name,
+      contact: customer.contact || current.contact
+    }));
+    setTab("calculator");
+  };
+
   const addExtraMaterial = () => {
     setExtraMaterials((current) => [
       ...current,
@@ -447,9 +494,9 @@ function App() {
     <main className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">MVP v5 · Vista imprimible</p>
+          <p className="eyebrow">MVP v6 · Clientes</p>
           <h1>Calculadora de Precios 3D</h1>
-          <p>Cotiza, guarda pedidos, copia mensajes y genera una vista imprimible para entregar al cliente.</p>
+          <p>Cotiza, guarda pedidos, genera cotizaciones y revisa clientes con historial, saldo y ventas.</p>
         </div>
         <button className="ghost" onClick={resetAll}>Restaurar</button>
       </header>
@@ -458,6 +505,7 @@ function App() {
         <button className={tab === "calculator" ? "active" : ""} onClick={() => setTab("calculator")}>Calculadora</button>
         <button className={tab === "products" ? "active" : ""} onClick={() => setTab("products")}>Productos</button>
         <button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>Pedidos</button>
+        <button className={tab === "customers" ? "active" : ""} onClick={() => setTab("customers")}>Clientes</button>
         <button className={tab === "materials" ? "active" : ""} onClick={() => setTab("materials")}>Materiales</button>
         <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>Historial</button>
       </nav>
@@ -770,6 +818,61 @@ function App() {
                       <button className="secondary small" onClick={() => setPrintOrder(order)}>Vista imprimible</button>
                       <button className="secondary small" onClick={() => loadOrderToCalculator(order)}>Cargar/editar</button>
                       <button className="danger small" onClick={() => removeOrder(order.id)}>Eliminar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </section>
+      )}
+
+      {tab === "customers" && (
+        <section className="single">
+          <Card title="Clientes">
+            <p className="muted">La lista se crea automáticamente usando los pedidos guardados. Si un cliente tiene varios pedidos, aquí se agrupan.</p>
+            {customers.length === 0 ? (
+              <p className="empty">Aún no hay clientes. Guarda pedidos para que aparezcan aquí.</p>
+            ) : (
+              <div className="customer-list">
+                {customers.map((customer) => (
+                  <div className="customer-card" key={customer.id}>
+                    <div className="customer-head">
+                      <div>
+                        <strong>{customer.name}</strong>
+                        <p>{customer.contact || "Sin contacto registrado"}</p>
+                      </div>
+                      <span className="badge">{customer.orders.length} pedido{customer.orders.length === 1 ? "" : "s"}</span>
+                    </div>
+
+                    <div className="customer-summary">
+                      <div><span>Total vendido</span><strong>{money(customer.totalSold)}</strong></div>
+                      <div><span>Saldo pendiente</span><strong>{money(customer.balance)}</strong></div>
+                      <div><span>Ganancia est.</span><strong>{money(customer.profit)}</strong></div>
+                      <div><span>Último pedido</span><strong>{customer.lastProduct || "N/A"}</strong></div>
+                    </div>
+
+                    <details className="customer-details">
+                      <summary>Ver pedidos del cliente</summary>
+                      <div className="customer-orders">
+                        {customer.orders.map((order) => (
+                          <div className="customer-order-row" key={order.id}>
+                            <div>
+                              <strong>{order.productName}</strong>
+                              <p>{order.createdAt} · {order.status} · {order.paymentStatus}</p>
+                            </div>
+                            <div className="customer-order-money">
+                              <span>Total</span>
+                              <strong>{money(order.total)}</strong>
+                            </div>
+                            <button className="secondary small" onClick={() => loadOrderToCalculator(order)}>Cargar</button>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+
+                    <div className="product-actions">
+                      <button className="primary small" onClick={() => loadCustomerToDraft(customer)}>Nuevo pedido para este cliente</button>
                     </div>
                   </div>
                 ))}
